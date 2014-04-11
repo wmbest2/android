@@ -9,7 +9,7 @@ func runOnAll(params []string) []byte {
     devices := AdbDevices(nil)
     var out string
     for _,d := range devices {
-        fmt.Printf("%s\n", d)
+        fmt.Printf("%s\n", &d)
         v,_ := d.AdbExec(params...)
         out += string(v) + "\n"
     }
@@ -17,10 +17,10 @@ func runOnAll(params []string) []byte {
 }
 
 func flagFromBool(f bool, s string) *string {
-    if (!f) {
-        return nil
-    }
     result := fmt.Sprintf("-%s", s)
+    if (!f) {
+        result = ""
+    }
     return &result
 }
 
@@ -42,13 +42,13 @@ func main() {
     allParams := []*string{aFlag,dFlag,eFlag,p,H,P}
     params := make([]string, 0, 7)
     for _, param := range allParams {
-        if (param != nil && *param != "") {
+        if (*param != "") {
             params = append(params, []string{*param}...)
         }
     }
 
     l := len(params) + len(flag.Args())
-    args := make([]string, l, l)
+    args := make([]string, 0, l)
     args = append(args, params...)
     args = append(args, flag.Args()...)
 

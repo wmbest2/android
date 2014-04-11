@@ -117,6 +117,6 @@ func (d *Device) Update() {
     d.Sdk = SdkVersion(sdk)
 }
 
-func (d Device) String() string {
+func (d *Device) String() string {
     return fmt.Sprintf("%s %s [%s (%d)]: %s", d.Manufacturer, d.Model, d.Version, int(d.Sdk), d.Serial)
 }
