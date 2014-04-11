@@ -1,12 +1,12 @@
 package main
 
 import (
-	"os"
-	"fmt"
+    "os"
+    "fmt"
 )
 
 func main() {
-	out,_ := AdbExec(os.Args[1:]...)
+    out,_ := AdbExec(os.Args[1:]...)
 
-	fmt.Print(string(out))
+    fmt.Print(string(out))
 }
