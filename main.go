@@ -6,16 +6,7 @@ import (
 )
 
 func main() {
-	out,err := AdbExec(os.Args[1:]...)
-
-	if (err != nil) {
-		fmt.Printf("%s", err)
-		return
-	}
-
-	for _, device := range AdbDevices() {
-		fmt.Printf("D: %s\n", device)
-	}
+	out,_ := AdbExec(os.Args[1:]...)
 
 	fmt.Print(string(out))
 }

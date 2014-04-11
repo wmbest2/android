@@ -8,7 +8,7 @@ import (
 )
 
 func AdbExec(args ...string) ([]byte, error) {
-	return exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...).Output()
+	return exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...).CombinedOutput()
 }
 
 func AdbDevices() []Device {
