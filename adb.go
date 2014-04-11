@@ -1,7 +1,6 @@
 package main 
 
 import (
-    "fmt"
     "log"
 	"os"
     "os/exec"
@@ -22,15 +21,17 @@ func AdbDevices() []Device {
     lines := strings.Split(string(out), "\n")
     lines = lines[1:]
 
+	devices := make([]Device, 0, len(lines))
+
     for _, line := range lines {
         if strings.TrimSpace(line) != "" {
             device := strings.Split(line, "\t")[0]
             d := &Device{Serial: device}
 			d.Update();
 
-			fmt.Printf("Device %s", d);
-
+			devices = append(devices, *d)
         }
     }
-	return nil
+
+	return devices
 }

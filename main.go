@@ -13,5 +13,9 @@ func main() {
 		return
 	}
 
+	for _, device := range AdbDevices() {
+		fmt.Printf("D: %s\n", device)
+	}
+
 	fmt.Print(string(out))
 }
