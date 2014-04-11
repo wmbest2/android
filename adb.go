@@ -1,6 +1,7 @@
 package main 
 
 import (
+    "fmt"
     "log"
     "os"
     "os/exec"
@@ -8,10 +9,27 @@ import (
 )
 
 func AdbExec(args ...string) ([]byte, error) {
+    fmt.Printf("Args: %s\n", args)
     return exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...).CombinedOutput()
 }
 
-func AdbDevices() []Device {
+func FindDevice(serial string) Device {
+    var dev Device
+    devices := FindDevices(serial)
+    if (len(devices) > 0) {
+        dev = devices[0]
+    }
+    return dev 
+}
+
+func FindDevices(serial ...string) []Device {
+    filter := &DeviceFilter{}
+    filter.Serials = serial
+    filter.MaxSdk = LATEST
+    return AdbDevices(filter)
+}
+
+func AdbDevices(filter *DeviceFilter) []Device {
     out, err := AdbExec("devices")
 
     if err != nil {
@@ -26,10 +44,12 @@ func AdbDevices() []Device {
     for _, line := range lines {
         if strings.TrimSpace(line) != "" {
             device := strings.Split(line, "\t")[0]
-            d := &Device{Serial: device}
-            d.Update();
 
-            devices = append(devices, *d)
+            d := &Device{Serial: device}
+            if (d.MatchFilter(filter)) {
+                d.Update();
+                devices = append(devices, *d)
+            }
         }
     }
 
