@@ -1,7 +1,6 @@
 package main 
 
 import (
-    "fmt"
     "log"
     "os"
     "os/exec"
@@ -9,7 +8,6 @@ import (
 )
 
 func AdbExec(args ...string) ([]byte, error) {
-    fmt.Printf("Args: %s\n", args)
     return exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...).CombinedOutput()
 }
 
@@ -46,8 +44,8 @@ func AdbDevices(filter *DeviceFilter) []Device {
             device := strings.Split(line, "\t")[0]
 
             d := &Device{Serial: device}
+            d.Update();
             if (d.MatchFilter(filter)) {
-                d.Update();
                 devices = append(devices, *d)
             }
         }

@@ -3,17 +3,25 @@ package main
 import (
     "fmt"
     "flag"
+    "sync"
 )
 
+func runOnDevice(wg *sync.WaitGroup, d Device, params []string) {
+    defer wg.Done()
+    fmt.Printf("%s\n", &d)
+    v,_ := d.AdbExec(params...)
+    fmt.Printf("%s\n", string(v))
+}
+
 func runOnAll(params []string) []byte {
+    var wg sync.WaitGroup
     devices := AdbDevices(nil)
-    var out string
     for _,d := range devices {
-        fmt.Printf("%s\n", &d)
-        v,_ := d.AdbExec(params...)
-        out += string(v) + "\n"
+        wg.Add(1)
+        go runOnDevice(&wg, d, params)
     }
-    return []byte(out)
+    wg.Wait()
+    return []byte("")
 }
 
 func flagFromBool(f bool, s string) *string {
@@ -60,6 +68,8 @@ func main() {
     } else {
 
         if (flag.Arg(0) == "install") {
+            out = runOnAll(args)
+        } else if (flag.Arg(0) == "uninstall") {
             out = runOnAll(args)
         } else {
             out,_ = AdbExec(flag.Args()...)
