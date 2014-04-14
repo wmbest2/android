@@ -1,9 +1,10 @@
-package main
+package adb
 
 import (
     "fmt"
     "strings"
     "strconv"
+    "sync"
 )
 
 type DeviceType int
@@ -49,11 +50,11 @@ var sdkMap = map[SdkVersion]string{
 }
 
 type Device struct {
-    Serial string
-    Manufacturer string
-    Model string
-    Sdk SdkVersion
-    Version string
+    Serial string `json:"serial"`
+    Manufacturer string `json:"manufacturer"`
+    Model string `json:"model"`
+    Sdk SdkVersion `json:"sdk"`
+    Version string `json:"version"`
 }
 
 type DeviceFilter struct {
@@ -94,27 +95,44 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
     }
 
     if (d.Sdk < filter.MinSdk && d.Sdk > filter.MaxSdk) {
-        return false;
+        return false
     } else if (!stringInSlice(d.Serial, filter.Serials)) {
         return false
     }
     return true
 }
 
-func (d *Device) GetProp(prop string) string {
-    p, err := d.AdbExec("shell", "getprop", prop)
-    if (err == nil) {
-        return strings.TrimSpace(string(p));
-    }
-    return ""
+func (d *Device) GetProp(out chan string, prop string) {
+    go func() {
+        p, err := d.AdbExec("shell", "getprop", prop)
+        if (err == nil) {
+            out <- strings.TrimSpace(string(p));
+        } else {
+            out <- ""
+        }
+    }()
 }
 
-func (d *Device) Update() {
-    d.Manufacturer = d.GetProp("ro.product.manufacturer")
-    d.Model = d.GetProp("ro.product.model")
-    d.Version = d.GetProp("ro.build.version.release")
-    sdk, _ := strconv.ParseInt(d.GetProp("ro.build.version.sdk"), 10, 0)
-    d.Sdk = SdkVersion(sdk)
+func (d *Device) Update(wg *sync.WaitGroup) {
+
+    defer wg.Done()
+
+    mf := make(chan string)
+    md := make(chan string)
+    vr := make(chan string)
+    sdk := make(chan string)
+
+    d.GetProp(mf, "ro.product.manufacturer")
+    d.GetProp(md, "ro.product.model")
+    d.GetProp(vr, "ro.build.version.release")
+    d.GetProp(sdk, "ro.build.version.sdk")
+
+    d.Manufacturer = <- mf
+    d.Model = <- md
+    d.Version = <- vr
+
+    sdk_int,_ := strconv.ParseInt(<-sdk, 10, 0)
+    d.Sdk = SdkVersion(sdk_int)
 }
 
 func (d *Device) String() string {
