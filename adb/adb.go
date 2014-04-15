@@ -52,7 +52,7 @@ func ListDevices(filter *DeviceFilter) []*Device {
 			wg.Add(1)
 			go func() {
                 defer wg.Done()
-                <-d.Update()
+                d.Update()
             }()
 		}
 	}

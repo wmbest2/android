@@ -115,9 +115,7 @@ func (d *Device) GetProp(prop string) chan string {
 	return out
 }
 
-func (d *Device) Update() chan bool {
-
-    done := make(chan bool)
+func (d *Device) Update() {
 
 	d.Manufacturer = <-d.GetProp("ro.product.manufacturer")
 	d.Model = <-d.GetProp("ro.product.model")
@@ -126,8 +124,6 @@ func (d *Device) Update() chan bool {
 
 	sdk_int, _ := strconv.ParseInt(sdk, 10, 0)
 	d.Sdk = SdkVersion(sdk_int)
-    
-    return done
 }
 
 func (d *Device) String() string {
