@@ -48,25 +48,25 @@ type Application struct {
 
 /* 
 
-    <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="string"
-          android:sharedUserId="string"
-          android:sharedUserLabel="string resource" 
-          android:versionCode="integer"
-          android:versionName="string"
-          android:installLocation=["auto" | "internalOnly" | "preferExternal"] >
-    <application> 
-    <compatible-screens> 
-    <instrumentation> 
-    <permission> 
-    <permission-group> 
-    <permission-tree> 
-    <supports-gl-texture>
-    <supports-screens> 
-    <uses-configuration> 
-    <uses-feature> 
-    <uses-permission> 
-    <uses-sdk>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="string"
+              android:sharedUserId="string"
+              android:sharedUserLabel="string resource" 
+              android:versionCode="integer"
+              android:versionName="string"
+              android:installLocation=["auto" | "internalOnly" | "preferExternal"] >
+           <application> 
+           <compatible-screens> 
+           <instrumentation> 
+           <permission> 
+           <permission-group> 
+           <permission-tree> 
+           <supports-gl-texture>
+           <supports-screens> 
+           <uses-configuration> 
+           <uses-feature> 
+           <uses-permission> 
+           <uses-sdk>
 */
 type Manifest struct {
     Package string `xml:"package,attr"`
