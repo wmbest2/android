@@ -8,7 +8,7 @@ import (
 	"sync"
 )
 
-func AdbExec(args ...string) ([]byte, error) {
+func Exec(args ...string) ([]byte, error) {
 	return exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...).CombinedOutput()
 }
 
@@ -25,11 +25,11 @@ func FindDevices(serial ...string) []*Device {
 	filter := &DeviceFilter{}
 	filter.Serials = serial
 	filter.MaxSdk = LATEST
-	return AdbDevices(filter)
+	return ListDevices(filter)
 }
 
-func AdbDevices(filter *DeviceFilter) []*Device {
-	out, err := AdbExec("devices")
+func ListDevices(filter *DeviceFilter) []*Device {
+	out, err := Exec("devices")
 
 	if err != nil {
 		log.Fatal(err)
@@ -50,7 +50,10 @@ func AdbDevices(filter *DeviceFilter) []*Device {
 			devices = append(devices, d)
 
 			wg.Add(1)
-			go d.Update(&wg)
+			go func() {
+                defer wg.Done()
+                <-d.Update()
+            }()
 		}
 	}
 

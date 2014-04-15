@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type DeviceType int
@@ -77,7 +76,7 @@ func (s SdkVersion) String() string {
 
 func (d *Device) AdbExec(args ...string) ([]byte, error) {
 	args = append([]string{"-s", d.Serial}, args...)
-	return AdbExec(args...)
+	return Exec(args...)
 }
 
 func stringInSlice(a string, list []string) bool {
@@ -102,7 +101,8 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 	return true
 }
 
-func (d *Device) GetProp(out chan string, prop string) {
+func (d *Device) GetProp(prop string) chan string {
+	out := make(chan string)
 	go func() {
 		p, err := d.AdbExec("shell", "getprop", prop)
 		if err == nil {
@@ -111,28 +111,23 @@ func (d *Device) GetProp(out chan string, prop string) {
 			out <- ""
 		}
 	}()
+
+	return out
 }
 
-func (d *Device) Update(wg *sync.WaitGroup) {
+func (d *Device) Update() chan bool {
 
-	defer wg.Done()
+    done := make(chan bool)
 
-	mf := make(chan string)
-	md := make(chan string)
-	vr := make(chan string)
-	sdk := make(chan string)
+	d.Manufacturer = <-d.GetProp("ro.product.manufacturer")
+	d.Model = <-d.GetProp("ro.product.model")
+	d.Version = <-d.GetProp("ro.build.version.release")
+	sdk := <-d.GetProp("ro.build.version.sdk")
 
-	d.GetProp(mf, "ro.product.manufacturer")
-	d.GetProp(md, "ro.product.model")
-	d.GetProp(vr, "ro.build.version.release")
-	d.GetProp(sdk, "ro.build.version.sdk")
-
-	d.Manufacturer = <-mf
-	d.Model = <-md
-	d.Version = <-vr
-
-	sdk_int, _ := strconv.ParseInt(<-sdk, 10, 0)
+	sdk_int, _ := strconv.ParseInt(sdk, 10, 0)
 	d.Sdk = SdkVersion(sdk_int)
+    
+    return done
 }
 
 func (d *Device) String() string {
