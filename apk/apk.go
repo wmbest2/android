@@ -1,9 +1,5 @@
 package apk
 
-import (
-    "encoding/xml"
-)
-
 type Instrumentation struct {
 	Name            string `xml:"name,attr"`
 	Target          string `xml:"targetPackage,attr"`

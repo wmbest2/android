@@ -34,9 +34,9 @@ type stringsMeta struct {
 
 // decompressXML -- Parse the 'compressed' binary form of Android XML docs
 // such as for AndroidManifest.xml in .apk files
-func Unmarshal(b []byte, manifest interface{}) error {
+func Unmarshal(data []byte, v interface{}) error {
 
-    body := bytes.NewReader(b)
+    body := bytes.NewReader(data)
 
 	var blocktype, size, indent, header uint32
     var stringsData stringsMeta
@@ -49,7 +49,7 @@ func Unmarshal(b []byte, manifest interface{}) error {
 
     // Check filesize
 	binary.Read(body, binary.LittleEndian, &header)
-	if int(header) != len(b) {
+	if int(header) != len(data) {
 		return errors.New("AXML file has the wrong size")
 	}
 
@@ -100,7 +100,7 @@ func Unmarshal(b []byte, manifest interface{}) error {
 				var offset uint32
 				binary.Read(body, binary.LittleEndian, &offset)
                 stringsData.DataOffset = append(stringsData.DataOffset, offset)
-			}manifest
+			}
             stringsData.StringDataOffset = 0x24 + stringsData.Nstrings * 4
 		case CHUNK_XML_END_NAMESPACE:
 		case CHUNK_XML_END_TAG:
@@ -168,7 +168,7 @@ func Unmarshal(b []byte, manifest interface{}) error {
 		offset += size
 		body.Seek(int64(offset), 0)
 	}
-    return xml.Unmarshal([]byte(output), manifest)
+    return xml.Unmarshal([]byte(output), v)
 }
 
 func computeIndent(indent uint32) string {
