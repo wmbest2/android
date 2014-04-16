@@ -76,7 +76,7 @@ func (s SdkVersion) String() string {
 
 func (d *Device) AdbExec(args ...string) ([]byte, error) {
 	args = append([]string{"-s", d.Serial}, args...)
-	return Exec(args...)
+	return ExecSync(args...)
 }
 
 func stringInSlice(a string, list []string) bool {
