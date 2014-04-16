@@ -1,6 +1,5 @@
-go-adb
+android
 ======
 
-Golang Adb library and Wrapper
+General purpose Golang android library
 
-Make sure `$GOPATH/bin/adb` preceeds `$ANDROID_HOME/platform-tools/adb` in your command line path

@@ -73,8 +73,12 @@ func (s SdkVersion) String() string {
 /*func GetFilter(arg string) {*/
 
 /*}*/
+func (d *Device) Exec(args ...string) chan interface{} {
+	args = append([]string{"-s", d.Serial}, args...)
+	return Exec(args...)
+}
 
-func (d *Device) AdbExec(args ...string) ([]byte, error) {
+func (d *Device) ExecSync(args ...string) ([]byte, error) {
 	args = append([]string{"-s", d.Serial}, args...)
 	return ExecSync(args...)
 }
@@ -104,7 +108,7 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 func (d *Device) GetProp(prop string) chan string {
 	out := make(chan string)
 	go func() {
-		p, err := d.AdbExec("shell", "getprop", prop)
+		p, err := d.ExecSync("shell", "getprop", prop)
 		if err == nil {
 			out <- strings.TrimSpace(string(p))
 		} else {
@@ -127,5 +131,5 @@ func (d *Device) Update() {
 }
 
 func (d *Device) String() string {
-	return fmt.Sprintf("%s %s [%s (%d)]: %s", d.Manufacturer, d.Model, d.Version, int(d.Sdk), d.Serial)
+	return fmt.Sprintf("%s\t%s %s\t[%s (%s)]", d.Serial, d.Manufacturer, d.Model, d.Version, sdkMap[d.Sdk])
 }
