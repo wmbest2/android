@@ -2,8 +2,8 @@ package adb
 
 import (
 	"bufio"
-    "io/ioutil"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
@@ -33,8 +33,8 @@ func Exec(args ...string) chan interface{} {
 
 		scanner := bufio.NewScanner(stdOut)
 		if err = cmd.Start(); err != nil {
-            e, _ := ioutil.ReadAll(stdErr)
-            out <- e
+			e, _ := ioutil.ReadAll(stdErr)
+			out <- e
 			out <- err
 			return
 		}
@@ -43,10 +43,10 @@ func Exec(args ...string) chan interface{} {
 			t := fmt.Sprintln(scanner.Text())
 			out <- t
 		}
-        e, _ := ioutil.ReadAll(stdErr)
+		e, _ := ioutil.ReadAll(stdErr)
 
 		if err = cmd.Wait(); err != nil {
-            out <- string(e)
+			out <- string(e)
 			out <- err
 		}
 	}()
@@ -57,7 +57,7 @@ func Exec(args ...string) chan interface{} {
 func ExecSync(args ...string) ([]byte, error) {
 	var output string
 	var v interface{}
-    var err error
+	var err error
 
 	out := Exec(args...)
 	out_ok := true
@@ -95,10 +95,10 @@ func FindDevices(serial ...string) []*Device {
 func ListDevices(filter *DeviceFilter) []*Device {
 	output, err := ExecSync("devices")
 
-    if err != nil {
-        fmt.Println(string(output))
-        log.Fatal(err)
-    }
+	if err != nil {
+		fmt.Println(string(output))
+		log.Fatal(err)
+	}
 
 	lines := strings.Split(string(output), "\n")
 	lines = lines[1:]

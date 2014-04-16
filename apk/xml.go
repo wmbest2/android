@@ -1,13 +1,13 @@
 package apk
 
 import (
+	"bytes"
 	"encoding/binary"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
 	"math"
-    "bytes"
-    "encoding/xml"
 )
 
 const (
@@ -29,37 +29,37 @@ type stringsMeta struct {
 	Flags            uint32
 	StringDataOffset uint32
 	Stylesoffset     uint32
-    DataOffset		[]uint32
+	DataOffset       []uint32
 }
 
 // decompressXML -- Parse the 'compressed' binary form of Android XML docs
 // such as for AndroidManifest.xml in .apk files
 func Unmarshal(data []byte, v interface{}) error {
 
-    body := bytes.NewReader(data)
+	body := bytes.NewReader(data)
 
 	var blocktype, size, indent, header uint32
-    var stringsData stringsMeta
+	var stringsData stringsMeta
 
-    // Check Header
+	// Check Header
 	binary.Read(body, binary.LittleEndian, &header)
 	if header != CHUNK_AXML_FILE {
 		return errors.New("AXML file has wrong header")
 	}
 
-    // Check filesize
+	// Check filesize
 	binary.Read(body, binary.LittleEndian, &header)
 	if int(header) != len(data) {
 		return errors.New("AXML file has the wrong size")
 	}
 
-    var output string
+	var output string
 	// Start offset at 8 bytes for header and size
 	for offset := uint32(8); offset < header; {
 		var lineNumber, skip, nsIdx, nameIdx, flag uint32
 		binary.Read(body, binary.LittleEndian, &blocktype)
 		binary.Read(body, binary.LittleEndian, &size)
-        if  blocktype != CHUNK_RESOURCEIDS && blocktype != CHUNK_STRINGS {
+		if blocktype != CHUNK_RESOURCEIDS && blocktype != CHUNK_STRINGS {
 			binary.Read(body, binary.LittleEndian, &lineNumber)
 			binary.Read(body, binary.LittleEndian, &skip)
 			if skip != SKIP_BLOCK {
@@ -68,7 +68,7 @@ func Unmarshal(data []byte, v interface{}) error {
 			binary.Read(body, binary.LittleEndian, &nsIdx)
 			binary.Read(body, binary.LittleEndian, &nameIdx)
 			binary.Read(body, binary.LittleEndian, &flag)
-        }
+		}
 		switch blocktype {
 		default:
 			return fmt.Errorf("Unkown chunk type: %X", blocktype)
@@ -96,12 +96,12 @@ func Unmarshal(data []byte, v interface{}) error {
 			binary.Read(body, binary.LittleEndian, &stringsData.StringDataOffset)
 			binary.Read(body, binary.LittleEndian, &stringsData.Stylesoffset)
 
-            for i := uint32(0); i < stringsData.Nstrings; i++ {
+			for i := uint32(0); i < stringsData.Nstrings; i++ {
 				var offset uint32
 				binary.Read(body, binary.LittleEndian, &offset)
-                stringsData.DataOffset = append(stringsData.DataOffset, offset)
+				stringsData.DataOffset = append(stringsData.DataOffset, offset)
 			}
-            stringsData.StringDataOffset = 0x24 + stringsData.Nstrings * 4
+			stringsData.StringDataOffset = 0x24 + stringsData.Nstrings*4
 		case CHUNK_XML_END_NAMESPACE:
 		case CHUNK_XML_END_TAG:
 			indent--
@@ -135,20 +135,20 @@ func Unmarshal(data []byte, v interface{}) error {
 				return fmt.Errorf("Expected flag 0x00140014, found %08X at %08X\n", flag, offset+4*6)
 			}
 
-            name := compXmlStringAt(body, stringsData, nameIdx)
+			name := compXmlStringAt(body, stringsData, nameIdx)
 
 			binary.Read(body, binary.LittleEndian, &attributeCount)
-            binary.Read(body, binary.LittleEndian, &junk)
+			binary.Read(body, binary.LittleEndian, &junk)
 
 			var att string
 			// Look for the Attributes
-            for i := 0; i < int(attributeCount); i++ {
-                var attrNameSi, attrNSSi, attrValueSi, flags, attrResId uint32 
-                binary.Read(body, binary.LittleEndian, &attrNSSi)
-                binary.Read(body, binary.LittleEndian, &attrNameSi)
-                binary.Read(body, binary.LittleEndian, &attrValueSi)
-                binary.Read(body, binary.LittleEndian, &flags)
-                binary.Read(body, binary.LittleEndian, &attrResId)
+			for i := 0; i < int(attributeCount); i++ {
+				var attrNameSi, attrNSSi, attrValueSi, flags, attrResId uint32
+				binary.Read(body, binary.LittleEndian, &attrNSSi)
+				binary.Read(body, binary.LittleEndian, &attrNameSi)
+				binary.Read(body, binary.LittleEndian, &attrValueSi)
+				binary.Read(body, binary.LittleEndian, &flags)
+				binary.Read(body, binary.LittleEndian, &attrResId)
 
 				attrName := compXmlStringAt(body, stringsData, attrNameSi)
 
@@ -168,7 +168,7 @@ func Unmarshal(data []byte, v interface{}) error {
 		offset += size
 		body.Seek(int64(offset), 0)
 	}
-    return xml.Unmarshal([]byte(output), v)
+	return xml.Unmarshal([]byte(output), v)
 }
 
 func computeIndent(indent uint32) string {
@@ -181,27 +181,27 @@ func computeIndent(indent uint32) string {
 // offset strOff.  This offset points to the 16 bit string length, which
 // is followed by that number of 16 bit (Unicode) chars.
 func compXmlStringAt(arr io.ReaderAt, meta stringsMeta, strOff uint32) string {
-    if strOff == 0xffffffff {
-        return ""
-    }
-    length := make([]byte, 2)
-    off := meta.StringDataOffset + meta.DataOffset[strOff]
+	if strOff == 0xffffffff {
+		return ""
+	}
+	length := make([]byte, 2)
+	off := meta.StringDataOffset + meta.DataOffset[strOff]
 	arr.ReadAt(length, int64(off))
-	strLen := int(length[1] << 8 + length[0])
+	strLen := int(length[1]<<8 + length[0])
 
 	chars := make([]byte, int64(strLen))
-    ii := 0
-    for i := 0; i < strLen; i++ {
-        c := make([]byte, 1)
-        arr.ReadAt(c, int64(int(off) + 2 + ii))
+	ii := 0
+	for i := 0; i < strLen; i++ {
+		c := make([]byte, 1)
+		arr.ReadAt(c, int64(int(off)+2+ii))
 
-        if c[0] == 0 {
-            i--
-        } else {
-            chars[i] = c[0]
-        }
-        ii++
+		if c[0] == 0 {
+			i--
+		} else {
+			chars[i] = c[0]
+		}
+		ii++
 	}
 
-	return string(chars) 
+	return string(chars)
 } // end of compXmlStringAt
