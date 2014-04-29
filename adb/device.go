@@ -48,6 +48,11 @@ var sdkMap = map[SdkVersion]string{
 	KITKAT:                 `KITKAT`,
 }
 
+type AdbRunner interface {
+    Exec(args ...string) chan interface{}
+    ExecSync(args ...string) ([]byte, error)
+}
+
 type Device struct {
 	Serial       string     `json:"serial"`
 	Manufacturer string     `json:"manufacturer"`

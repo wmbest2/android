@@ -11,6 +11,10 @@ import (
 	"sync"
 )
 
+const (
+    dalvikWarning = "WARNING: linker: libdvm.so has text relocations. This is wasting memory and is a security risk. Please fix."
+)
+
 func Exec(args ...string) chan interface{} {
 	out := make(chan interface{})
 
@@ -18,12 +22,6 @@ func Exec(args ...string) chan interface{} {
 		defer close(out)
 		cmd := exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...)
 		stdOut, err := cmd.StdoutPipe()
-
-		if err != nil {
-			out <- err
-			return
-		}
-
 		stdErr, err := cmd.StderrPipe()
 
 		if err != nil {
@@ -31,22 +29,30 @@ func Exec(args ...string) chan interface{} {
 			return
 		}
 
+		if err != nil {
+			out <- err
+			return
+		}
+
 		scanner := bufio.NewScanner(stdOut)
+
 		if err = cmd.Start(); err != nil {
-			e, _ := ioutil.ReadAll(stdErr)
-			out <- e
 			out <- err
 			return
 		}
 
 		for scanner.Scan() {
-			t := fmt.Sprintln(scanner.Text())
-			out <- t
+            b := scanner.Bytes()
+            if string(b[0:7]) == "WARNING" && string(b) == dalvikWarning {
+                continue
+            }
+			out <- append(b, byte('\n'))
 		}
+
 		e, _ := ioutil.ReadAll(stdErr)
 
 		if err = cmd.Wait(); err != nil {
-			out <- string(e)
+			out <- e
 			out <- err
 		}
 	}()
@@ -55,7 +61,7 @@ func Exec(args ...string) chan interface{} {
 }
 
 func ExecSync(args ...string) ([]byte, error) {
-	var output string
+	var output []byte 
 	var v interface{}
 	var err error
 
@@ -67,13 +73,13 @@ func ExecSync(args ...string) ([]byte, error) {
 			break
 		}
 		switch v, out_ok = <-out; v.(type) {
+		case []byte:
+			output = append(output, v.([]byte)...)
 		case error:
 			err = v.(error)
-		case string:
-			output = output + v.(string)
 		}
 	}
-	return []byte(output), err
+	return output, err
 }
 
 func FindDevice(serial string) Device {
