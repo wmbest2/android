@@ -49,8 +49,8 @@ var sdkMap = map[SdkVersion]string{
 }
 
 type AdbRunner interface {
-    Exec(args ...string) chan interface{}
-    ExecSync(args ...string) ([]byte, error)
+	Exec(args ...string) chan interface{}
+	ExecSync(args ...string) ([]byte, error)
 }
 
 type Device struct {
@@ -122,6 +122,25 @@ func (d *Device) GetProp(prop string) chan string {
 	}()
 
 	return out
+}
+
+func (d *Device) SetScreenOn(on bool) {
+	screen, err := d.ExecSync("shell", "dumpsys", "input_method", "|", "grep", "mScreenOn=false")
+	if err != nil {
+		return
+	}
+
+    if screen != nil && on || screen == nil && !on{
+        d.SendKey(26)
+    }
+}
+
+func (d *Device) SendKey(aKey int) {
+    d.ExecSync("shell", "input", "keyevent", fmt.Sprintf("%d", aKey))
+}
+
+func (d *Device) Unlock() {
+    d.SendKey(82)
 }
 
 func (d *Device) Update() {
