@@ -59,12 +59,13 @@ type Device struct {
 	Model        string     `json:"model"`
 	Sdk          SdkVersion `json:"sdk"`
 	Version      string     `json:"version"`
+    Density      int64      `json:"density"`
 }
 
 type DeviceFilter struct {
 	Type    DeviceType
 	Serials []string
-	Version string
+    Density int64
 	MinSdk  SdkVersion
 	MaxSdk  SdkVersion
 }
@@ -102,10 +103,12 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 		return true
 	}
 
-	if d.Sdk < filter.MinSdk && d.Sdk > filter.MaxSdk {
+	if d.Sdk < filter.MinSdk || (filter.MaxSdk != 0 && d.Sdk > filter.MaxSdk) {
 		return false
 	} else if !stringInSlice(d.Serial, filter.Serials) {
 		return false
+    } else if filter.Density != 0 && filter.Density != d.Density{
+        return false
 	}
 	return true
 }
@@ -149,9 +152,12 @@ func (d *Device) Update() {
 	d.Model = <-d.GetProp("ro.product.model")
 	d.Version = <-d.GetProp("ro.build.version.release")
 	sdk := <-d.GetProp("ro.build.version.sdk")
+	den := <-d.GetProp("ro.sf.lcd_density")
 
 	sdk_int, _ := strconv.ParseInt(sdk, 10, 0)
 	d.Sdk = SdkVersion(sdk_int)
+
+	d.Density, _ = strconv.ParseInt(den, 10, 0)
 }
 
 func (d *Device) String() string {
