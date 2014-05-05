@@ -1,5 +1,7 @@
 package apk
 
+import "github.com/wmbest2/android/adb"
+
 type Instrumentation struct {
 	Name            string `xml:"name,attr"`
 	Target          string `xml:"targetPackage,attr"`
@@ -37,10 +39,17 @@ type Application struct {
 	VmSafeMode            bool   `xml:"vmSafeMode,attr"`
 }
 
+type UsesSdk struct {
+	Min    adb.SdkVersion `xml:"minSdkVersion,attr"`
+	Target adb.SdkVersion `xml:"targetSdkVersion,attr"`
+	Max    adb.SdkVersion `xml:"maxSdkVersion,attr"`
+}
+
 type Manifest struct {
 	Package     string          `xml:"package,attr"`
 	VersionCode int             `xml:"versionCode,attr"`
 	VersionName string          `xml:"versionName,attr"`
 	App         Application     `xml:"application"`
 	Instrument  Instrumentation `xml:"instrumentation"`
+	Sdk         UsesSdk         `xml:"uses-sdk"`
 }
