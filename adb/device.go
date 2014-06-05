@@ -143,7 +143,13 @@ func (d *Device) SendKey(aKey int) {
 }
 
 func (d *Device) Unlock() {
-    d.SendKey(82)
+	screen, err := d.ExecSync("shell", "dumpsys", "activity", "|", "grep", "mLockScreenShown.true")
+	if err != nil {
+		return
+	}
+    if screen != nil {
+        d.SendKey(82)
+    }
 }
 
 func (d *Device) Update() {
