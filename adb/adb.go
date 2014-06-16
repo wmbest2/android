@@ -27,7 +27,7 @@ func Devices() []byte {
 }
 
 func (adb *Adb) Devices() []byte {
-    conn, _ := adb.getConnection()
+    conn, _ := Dial(adb)
     defer conn.Close()
 
     conn.Write([]byte("host:devices"))

@@ -13,7 +13,7 @@ type AdbConn struct {
     r *bufio.Reader
 }
 
-func (a *Adb) getConnection() (*AdbConn, error) {
+func Dial(a *Adb) (*AdbConn, error) {
     h := fmt.Sprintf("%s:%d", a.Host, a.Port)
     c, err := net.Dial("tcp", h)
     if err != nil {
