@@ -50,7 +50,7 @@ var sdkMap = map[SdkVersion]string{
 }
 
 type Device struct {
-	Host         *Adb       `json:"-"`
+	Dialer       `json:"-"`
 	Serial       string     `json:"serial"`
 	Manufacturer string     `json:"manufacturer"`
 	Model        string     `json:"model"`
@@ -108,7 +108,7 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 func (d *Device) GetProp(prop string) chan string {
 	out := make(chan string)
 	go func() {
-		p := d.Host.ShellSync(d, "getprop", prop)
+		p := ShellSync(d, "getprop", prop)
 		out <- strings.TrimSpace(string(p))
 	}()
 
@@ -123,7 +123,7 @@ func (d *Device) SetScreenOn(on bool) {
 }
 
 func (d *Device) findValue(val string, args ...string) bool {
-	out := d.Host.Shell(d, args...)
+	out := Shell(d, args...)
 	current := false
 	for line := range out {
 		if line != nil {
@@ -134,7 +134,7 @@ func (d *Device) findValue(val string, args ...string) bool {
 }
 
 func (d *Device) SendKey(aKey int) {
-	d.Host.ShellSync(d, "input", "keyevent", fmt.Sprintf("%d", aKey))
+	ShellSync(d, "input", "keyevent", fmt.Sprintf("%d", aKey))
 }
 
 func (d *Device) Unlock() {

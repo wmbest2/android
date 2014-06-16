@@ -9,12 +9,22 @@ import (
 	"strings"
 )
 
+type Transporter interface {
+	Dial() (*AdbConn, error)
+	Transport(conn *AdbConn)
+}
+
+type Dialer struct {
+	Host string
+	Port int
+}
+
 type AdbConn struct {
 	conn net.Conn
 	r    *bufio.Reader
 }
 
-func Dial(a *Adb) (*AdbConn, error) {
+func (a *Dialer) Dial() (*AdbConn, error) {
 	h := fmt.Sprintf("%s:%d", a.Host, a.Port)
 	c, err := net.Dial("tcp", h)
 	if err != nil {

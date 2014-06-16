@@ -10,16 +10,11 @@ const (
 )
 
 type Adb struct {
-	Host string
-	Port int
-}
-
-type Transporter interface {
-	Transport(conn *AdbConn)
+	Dialer
 }
 
 var (
-	Default = &Adb{"localhost", 5037}
+	Default = &Adb{Dialer: Dialer{"localhost", 5037}}
 )
 
 func Devices() []byte {
@@ -30,12 +25,12 @@ func (a *Adb) Transport(conn *AdbConn) {
 	conn.TransportAny()
 }
 
-func (a *Adb) Shell(t Transporter, args ...string) chan []byte {
+func Shell(t Transporter, args ...string) chan []byte {
 	out := make(chan []byte)
 
 	go func() {
 		defer close(out)
-		conn, err := Dial(a)
+		conn, err := t.Dial()
 		defer conn.Close()
 
 		if err != nil {
@@ -56,9 +51,9 @@ func (a *Adb) Shell(t Transporter, args ...string) chan []byte {
 	return out
 }
 
-func (a *Adb) ShellSync(t Transporter, args ...string) []byte {
+func ShellSync(t Transporter, args ...string) []byte {
 	output := make([]byte, 0)
-	out := a.Shell(t, args...)
+	out := Shell(t, args...)
 	for line := range out {
 		output = append(output, line...)
 	}
@@ -66,7 +61,7 @@ func (a *Adb) ShellSync(t Transporter, args ...string) []byte {
 }
 
 func (adb *Adb) Devices() []byte {
-	conn, err := Dial(adb)
+	conn, err := adb.Dial()
 	if err != nil {
 		return []byte{}
 	}
@@ -86,7 +81,7 @@ func (adb *Adb) TrackDevices() chan []byte {
 	go func() {
 		defer close(out)
 
-		conn, _ := Dial(adb)
+		conn, _ := adb.Dial()
 		defer conn.Close()
 
 		conn.Write([]byte("host:track-devices"))
@@ -136,7 +131,7 @@ func ListDevices(filter *DeviceFilter) []*Device {
 		if strings.TrimSpace(line) != "" {
 			device := strings.Split(line, "\t")[0]
 
-			d := &Device{Host: Default, Serial: device}
+			d := &Device{Dialer: Default.Dialer, Serial: device}
 			devices = append(devices, d)
 
 			wg.Add(1)
