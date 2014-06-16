@@ -30,11 +30,11 @@ func (adb *Adb) Devices() []byte {
     conn, _ := adb.getConnection()
     defer conn.Close()
 
-    reader, _ := adb.Send(conn, "host:devices")
-    size, _ := adb.readSize(reader, 4);
+    conn.Write([]byte("host:devices"))
+    size, _ := conn.readSize(4);
 
     lines := make([]byte, size);
-    reader.Read(lines)
+    conn.Read(lines)
 
     return lines
 }
