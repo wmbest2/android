@@ -39,7 +39,6 @@ func (adb *Adb) Devices() []byte {
     return lines
 }
 
-
 func Exec(args ...string) chan interface{} {
 	out := make(chan interface{})
 

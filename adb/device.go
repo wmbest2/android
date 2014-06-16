@@ -2,6 +2,7 @@ package adb
 
 import (
 	"fmt"
+    "bufio"
 	"strconv"
 	"strings"
 )
@@ -79,6 +80,21 @@ func (s SdkVersion) String() string {
 /*func GetFilter(arg string) {*/
 
 /*}*/
+
+func (d *Device) Shell(args ...string) ([]byte, error) {
+    conn, _ := Dial(Default())
+    defer conn.Close()
+
+    cmd := fmt.Sprintf("host:transport:%s", d.Serial)
+    conn.Write([]byte(cmd))
+
+    cmd = fmt.Sprintf("shell:%s", strings.Join(args, " "))
+    conn.Write([]byte(cmd))
+
+    out, _, err := bufio.NewReader(conn).ReadLine()
+    return out, err;
+}
+
 func (d *Device) Exec(args ...string) chan interface{} {
 	args = append([]string{"-s", d.Serial}, args...)
 	return Exec(args...)
@@ -116,7 +132,7 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 func (d *Device) GetProp(prop string) chan string {
 	out := make(chan string)
 	go func() {
-		p, err := d.ExecSync("shell", "getprop", prop)
+		p, err := d.Shell("getprop", prop)
 		if err == nil {
 			out <- strings.TrimSpace(string(p))
 		} else {
