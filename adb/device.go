@@ -108,31 +108,29 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 func (d *Device) GetProp(prop string) chan string {
 	out := make(chan string)
 	go func() {
-		p, err := d.Host.ShellSync(d, "getprop", prop)
-		if err == nil {
-			out <- strings.TrimSpace(string(p))
-		} else {
-			out <- ""
-		}
+		p := d.Host.ShellSync(d, "getprop", prop)
+		out <- strings.TrimSpace(string(p))
 	}()
 
 	return out
 }
 
 func (d *Device) SetScreenOn(on bool) {
-	screen, err := d.Host.ShellSync(d, "dumpsys", "input_method")
-	if err != nil {
-		return
-	}
-
-	current := false
-	if screen != nil {
-		current = bytes.Contains(screen, []byte("mScreenOn=false"))
-	}
-
+	current := d.findValue("mScreenOn=false", "dumpsys", "input_method")
 	if !current && on || current && !on {
 		d.SendKey(26)
 	}
+}
+
+func (d *Device) findValue(val string, args ...string) bool {
+	out := d.Host.Shell(d, args...)
+	current := false
+	for line := range out {
+		if line != nil {
+			current = bytes.Contains(line, []byte(val))
+		}
+	}
+	return current
 }
 
 func (d *Device) SendKey(aKey int) {
@@ -140,16 +138,7 @@ func (d *Device) SendKey(aKey int) {
 }
 
 func (d *Device) Unlock() {
-	screen, err := d.Host.ShellSync(d, "dumpsys", "activity", "|", "grep", "mLockScreenShown.true")
-	if err != nil {
-		return
-	}
-
-	current := false
-	if screen != nil {
-		current = bytes.Contains(screen, []byte("mLockScreenShown true"))
-	}
-
+	current := d.findValue("mLockScreenShown true", "dumpsys", "activity")
 	if current {
 		d.SendKey(82)
 	}

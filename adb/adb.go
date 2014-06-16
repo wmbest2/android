@@ -30,16 +30,17 @@ func (a *Adb) Transport(conn *AdbConn) {
 	conn.TransportAny()
 }
 
-func (a *Adb) Shell(t Transporter, args ...string) chan interface{} {
-	out := make(chan interface{})
+func (a *Adb) Shell(t Transporter, args ...string) chan []byte {
+	out := make(chan []byte)
 
 	go func() {
 		defer close(out)
 		conn, err := Dial(a)
-		if err != nil {
-			out <- err
-		}
 		defer conn.Close()
+
+		if err != nil {
+			return
+		}
 
 		t.Transport(conn)
 		conn.Shell(args...)
@@ -47,7 +48,6 @@ func (a *Adb) Shell(t Transporter, args ...string) chan interface{} {
 		for {
 			line, _, err := conn.r.ReadLine()
 			if err != nil {
-				out <- err
 				break
 			}
 			out <- line
@@ -56,25 +56,20 @@ func (a *Adb) Shell(t Transporter, args ...string) chan interface{} {
 	return out
 }
 
-func (a *Adb) ShellSync(t Transporter, args ...string) ([]byte, error) {
+func (a *Adb) ShellSync(t Transporter, args ...string) []byte {
 	output := make([]byte, 0)
-	out_ok := true
-	var v interface{}
 	out := a.Shell(t, args...)
-	for {
-		if !out_ok {
-			break
-		}
-		switch v, out_ok = <-out; v.(type) {
-		case []byte:
-			output = append(output, v.([]byte)...)
-		}
+	for line := range out {
+		output = append(output, line...)
 	}
-	return output, nil
+	return output
 }
 
 func (adb *Adb) Devices() []byte {
-	conn, _ := Dial(adb)
+	conn, err := Dial(adb)
+	if err != nil {
+		return []byte{}
+	}
 	defer conn.Close()
 
 	conn.Write([]byte("host:devices"))
@@ -84,6 +79,33 @@ func (adb *Adb) Devices() []byte {
 	conn.Read(lines)
 
 	return lines
+}
+
+func (adb *Adb) TrackDevices() chan []byte {
+	out := make(chan []byte)
+	go func() {
+		defer close(out)
+
+		conn, _ := Dial(adb)
+		defer conn.Close()
+
+		conn.Write([]byte("host:track-devices"))
+
+		for {
+			size, err := conn.readSize(4)
+			if err != nil {
+				break
+			}
+
+			lines := make([]byte, size)
+			_, err = conn.Read(lines)
+			if err != nil {
+				break
+			}
+			out <- lines
+		}
+	}()
+	return out
 }
 
 func FindDevice(serial string) Device {

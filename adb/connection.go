@@ -26,7 +26,6 @@ func Dial(a *Adb) (*AdbConn, error) {
 func (a *AdbConn) TransportAny() error {
 	cmd := fmt.Sprintf("host:transport-any")
 	_, err := a.Write([]byte(cmd))
-	fmt.Println(err)
 	return err
 }
 
