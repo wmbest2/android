@@ -1,8 +1,8 @@
 package adb
 
 import (
+	"bytes"
 	"fmt"
-    "bufio"
 	"strconv"
 	"strings"
 )
@@ -49,24 +49,20 @@ var sdkMap = map[SdkVersion]string{
 	KITKAT:                 `KITKAT`,
 }
 
-type AdbRunner interface {
-	Exec(args ...string) chan interface{}
-	ExecSync(args ...string) ([]byte, error)
-}
-
 type Device struct {
+	Host         *Adb       `json:"-"`
 	Serial       string     `json:"serial"`
 	Manufacturer string     `json:"manufacturer"`
 	Model        string     `json:"model"`
 	Sdk          SdkVersion `json:"sdk"`
 	Version      string     `json:"version"`
-    Density      int64      `json:"density"`
+	Density      int64      `json:"density"`
 }
 
 type DeviceFilter struct {
 	Type    DeviceType
 	Serials []string
-    Density int64
+	Density int64
 	MinSdk  SdkVersion
 	MaxSdk  SdkVersion
 }
@@ -81,28 +77,8 @@ func (s SdkVersion) String() string {
 
 /*}*/
 
-func (d *Device) Shell(args ...string) ([]byte, error) {
-    conn, _ := Dial(Default())
-    defer conn.Close()
-
-    cmd := fmt.Sprintf("host:transport:%s", d.Serial)
-    conn.Write([]byte(cmd))
-
-    cmd = fmt.Sprintf("shell:%s", strings.Join(args, " "))
-    conn.Write([]byte(cmd))
-
-    out, _, err := bufio.NewReader(conn).ReadLine()
-    return out, err;
-}
-
-func (d *Device) Exec(args ...string) chan interface{} {
-	args = append([]string{"-s", d.Serial}, args...)
-	return Exec(args...)
-}
-
-func (d *Device) ExecSync(args ...string) ([]byte, error) {
-	args = append([]string{"-s", d.Serial}, args...)
-	return ExecSync(args...)
+func (d *Device) Transport(conn *AdbConn) {
+	conn.TransportSerial(d.Serial)
 }
 
 func stringInSlice(a string, list []string) bool {
@@ -123,8 +99,8 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 		return false
 	} else if !stringInSlice(d.Serial, filter.Serials) {
 		return false
-    } else if filter.Density != 0 && filter.Density != d.Density{
-        return false
+	} else if filter.Density != 0 && filter.Density != d.Density {
+		return false
 	}
 	return true
 }
@@ -132,7 +108,7 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 func (d *Device) GetProp(prop string) chan string {
 	out := make(chan string)
 	go func() {
-		p, err := d.Shell("getprop", prop)
+		p, err := d.Host.ShellSync(d, "getprop", prop)
 		if err == nil {
 			out <- strings.TrimSpace(string(p))
 		} else {
@@ -144,37 +120,56 @@ func (d *Device) GetProp(prop string) chan string {
 }
 
 func (d *Device) SetScreenOn(on bool) {
-	screen, err := d.ExecSync("shell", "dumpsys", "input_method", "|", "grep", "mScreenOn=false")
+	screen, err := d.Host.ShellSync(d, "dumpsys", "input_method")
 	if err != nil {
 		return
 	}
 
-    if screen != nil && on || screen == nil && !on{
-        d.SendKey(26)
-    }
+	current := false
+	if screen != nil {
+		current = bytes.Contains(screen, []byte("mScreenOn=false"))
+	}
+
+	if !current && on || current && !on {
+		d.SendKey(26)
+	}
 }
 
 func (d *Device) SendKey(aKey int) {
-    d.ExecSync("shell", "input", "keyevent", fmt.Sprintf("%d", aKey))
+	d.Host.ShellSync(d, "input", "keyevent", fmt.Sprintf("%d", aKey))
 }
 
 func (d *Device) Unlock() {
-	screen, err := d.ExecSync("shell", "dumpsys", "activity", "|", "grep", "mLockScreenShown.true")
+	screen, err := d.Host.ShellSync(d, "dumpsys", "activity", "|", "grep", "mLockScreenShown.true")
 	if err != nil {
 		return
 	}
-    if screen != nil {
-        d.SendKey(82)
-    }
+
+	current := false
+	if screen != nil {
+		current = bytes.Contains(screen, []byte("mLockScreenShown true"))
+	}
+
+	if current {
+		d.SendKey(82)
+	}
 }
 
 func (d *Device) Update() {
 
-	d.Manufacturer = <-d.GetProp("ro.product.manufacturer")
-	d.Model = <-d.GetProp("ro.product.model")
-	d.Version = <-d.GetProp("ro.build.version.release")
-	sdk := <-d.GetProp("ro.build.version.sdk")
-	den := <-d.GetProp("ro.sf.lcd_density")
+	out := []chan string{
+		d.GetProp("ro.product.manufacturer"),
+		d.GetProp("ro.product.model"),
+		d.GetProp("ro.build.version.release"),
+		d.GetProp("ro.build.version.sdk"),
+		d.GetProp("ro.sf.lcd_density"),
+	}
+
+	d.Manufacturer = <-out[0]
+	d.Model = <-out[1]
+	d.Version = <-out[2]
+	sdk := <-out[3]
+	den := <-out[4]
 
 	sdk_int, _ := strconv.ParseInt(sdk, 10, 0)
 	d.Sdk = SdkVersion(sdk_int)

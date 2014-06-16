@@ -1,97 +1,66 @@
 package adb
 
 import (
-	"bufio"
-	"io/ioutil"
-	"os"
-	"os/exec"
 	"strings"
 	"sync"
 )
 
 const (
-    dalvikWarning = "WARNING: linker: libdvm.so has text relocations. This is wasting memory and is a security risk. Please fix."
+	dalvikWarning = "WARNING: linker: libdvm.so has text relocations. This is wasting memory and is a security risk. Please fix."
 )
 
 type Adb struct {
-    Host string
-    Port int
+	Host string
+	Port int
 }
 
-func Default() *Adb {
-    return &Adb{"localhost", 5037}
+type Transporter interface {
+	Transport(conn *AdbConn)
 }
+
+var (
+	Default = &Adb{"localhost", 5037}
+)
 
 func Devices() []byte {
-    return Default().Devices();
+	return Default.Devices()
 }
 
-func (adb *Adb) Devices() []byte {
-    conn, _ := Dial(adb)
-    defer conn.Close()
-
-    conn.Write([]byte("host:devices"))
-    size, _ := conn.readSize(4);
-
-    lines := make([]byte, size);
-    conn.Read(lines)
-
-    return lines
+func (a *Adb) Transport(conn *AdbConn) {
+	conn.TransportAny()
 }
 
-func Exec(args ...string) chan interface{} {
+func (a *Adb) Shell(t Transporter, args ...string) chan interface{} {
 	out := make(chan interface{})
 
 	go func() {
 		defer close(out)
-		cmd := exec.Command(os.ExpandEnv("$ANDROID_HOME/platform-tools/adb"), args...)
-		stdOut, err := cmd.StdoutPipe()
-		stdErr, err := cmd.StderrPipe()
-
+		conn, err := Dial(a)
 		if err != nil {
 			out <- err
-			return
 		}
+		defer conn.Close()
 
-		if err != nil {
-			out <- err
-			return
-		}
+		t.Transport(conn)
+		conn.Shell(args...)
 
-		scanner := bufio.NewScanner(stdOut)
-
-		if err = cmd.Start(); err != nil {
-			out <- err
-			return
-		}
-
-		for scanner.Scan() {
-            b := scanner.Bytes()
-            if string(b[0:7]) == "WARNING" && string(b) == dalvikWarning {
-                continue
-            }
-			out <- append(b, byte('\n'))
-		}
-
-		e, _ := ioutil.ReadAll(stdErr)
-
-		if err = cmd.Wait(); err != nil {
-			out <- e
-			out <- err
+		for {
+			line, _, err := conn.r.ReadLine()
+			if err != nil {
+				out <- err
+				break
+			}
+			out <- line
 		}
 	}()
-
 	return out
 }
 
-func ExecSync(args ...string) ([]byte, error) {
-	var output []byte 
-	var v interface{}
-	var err error
-
-	out := Exec(args...)
+func (a *Adb) ShellSync(t Transporter, args ...string) ([]byte, error) {
+	output := make([]byte, 0)
 	out_ok := true
-
+	var v interface{}
+	out := a.Shell(t, args...)
 	for {
 		if !out_ok {
 			break
@@ -99,11 +68,22 @@ func ExecSync(args ...string) ([]byte, error) {
 		switch v, out_ok = <-out; v.(type) {
 		case []byte:
 			output = append(output, v.([]byte)...)
-		case error:
-			err = v.(error)
 		}
 	}
-	return output, err
+	return output, nil
+}
+
+func (adb *Adb) Devices() []byte {
+	conn, _ := Dial(adb)
+	defer conn.Close()
+
+	conn.Write([]byte("host:devices"))
+	size, _ := conn.readSize(4)
+
+	lines := make([]byte, size)
+	conn.Read(lines)
+
+	return lines
 }
 
 func FindDevice(serial string) Device {
@@ -123,7 +103,7 @@ func FindDevices(serial ...string) []*Device {
 }
 
 func ListDevices(filter *DeviceFilter) []*Device {
-	output := Devices() 
+	output := Devices()
 	lines := strings.Split(string(output), "\n")
 
 	devices := make([]*Device, 0, len(lines))
@@ -134,7 +114,7 @@ func ListDevices(filter *DeviceFilter) []*Device {
 		if strings.TrimSpace(line) != "" {
 			device := strings.Split(line, "\t")[0]
 
-			d := &Device{Serial: device}
+			d := &Device{Host: Default, Serial: device}
 			devices = append(devices, d)
 
 			wg.Add(1)
