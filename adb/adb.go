@@ -2,18 +2,71 @@ package adb
 
 import (
 	"bufio"
+    "errors"
 	"fmt"
 	"io/ioutil"
-	"log"
+    "net"
 	"os"
 	"os/exec"
 	"strings"
+    "strconv"
 	"sync"
 )
 
 const (
     dalvikWarning = "WARNING: linker: libdvm.so has text relocations. This is wasting memory and is a security risk. Please fix."
 )
+
+type Adb struct {
+    Host string
+    Port int
+}
+
+func Default() *Adb {
+    return &Adb{"localhost", 5037}
+}
+
+func (a *Adb) getConnection() (net.Conn, error) {
+    h := fmt.Sprintf("%s:%d", a.Host, a.Port)
+    return net.Dial("tcp", h)
+}
+
+func (a *Adb) readSize(reader *bufio.Reader, bcount int) (uint64, error) {
+    size := make([]byte, bcount);
+    reader.Read(size);
+    return strconv.ParseUint(string(size), 16, 0)
+}
+
+func Devices() []byte {
+    return Default().Devices();
+}
+
+func (a *Adb) Send(conn net.Conn, cmd string) (*bufio.Reader, error) {
+    fmt.Fprintf(conn, "%04x%s", len(cmd), cmd)
+    
+    reader := bufio.NewReader(conn)
+    status := make([]byte, 4);
+    _, err := reader.Read(status)
+    if err != nil || string(status) != `OKAY` {
+        return nil, errors.New(`invalid connection`)
+    }
+
+    return reader, nil
+}
+
+func (adb *Adb) Devices() []byte {
+    conn, _ := adb.getConnection()
+    defer conn.Close()
+
+    reader, _ := adb.Send(conn, "host:devices")
+    size, _ := adb.readSize(reader, 4);
+
+    lines := make([]byte, size);
+    reader.Read(lines)
+
+    return lines
+}
+
 
 func Exec(args ...string) chan interface{} {
 	out := make(chan interface{})
@@ -99,15 +152,8 @@ func FindDevices(serial ...string) []*Device {
 }
 
 func ListDevices(filter *DeviceFilter) []*Device {
-	output, err := ExecSync("devices")
-
-	if err != nil {
-		fmt.Println(string(output))
-		log.Fatal(err)
-	}
-
+	output := Devices() 
 	lines := strings.Split(string(output), "\n")
-	lines = lines[1:]
 
 	devices := make([]*Device, 0, len(lines))
 
