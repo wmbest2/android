@@ -2,6 +2,7 @@ package adb
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 )
@@ -15,15 +16,15 @@ type Adb struct {
 }
 
 var (
-	Default = &Adb{Dialer: Dialer{"localhost", 5037}}
+	Default = &Adb{Dialer{"localhost", 5037}}
 )
 
 func Devices() []byte {
 	return Default.Devices()
 }
 
-func (a *Adb) Transport(conn *AdbConn) {
-	conn.TransportAny()
+func (a *Adb) Transport(conn *AdbConn) error {
+	return conn.TransportAny()
 }
 
 func Shell(t Transporter, args ...string) chan []byte {
@@ -40,7 +41,11 @@ func Shell(t Transporter, args ...string) chan []byte {
 
 		defer conn.Close()
 
-		t.Transport(conn)
+		err = t.Transport(conn)
+		if err != nil {
+			fmt.Println("more than one device or emulator")
+			os.Exit(2)
+		}
 		conn.Shell(args...)
 
 		for {
@@ -70,7 +75,7 @@ func (adb *Adb) Devices() []byte {
 	}
 	defer conn.Close()
 
-	conn.Write([]byte("host:devices"))
+	conn.WriteCmd("host:devices")
 	size, _ := conn.readSize(4)
 
 	lines := make([]byte, size)
@@ -87,7 +92,7 @@ func (adb *Adb) TrackDevices() chan []byte {
 		conn, _ := adb.Dial()
 		defer conn.Close()
 
-		conn.Write([]byte("host:track-devices"))
+		conn.WriteCmd("host:track-devices")
 
 		for {
 			size, err := conn.readSize(4)

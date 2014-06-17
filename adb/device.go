@@ -81,8 +81,8 @@ func (s SdkVersion) String() string {
 
 /*}*/
 
-func (d *Device) Transport(conn *AdbConn) {
-	conn.TransportSerial(d.Serial)
+func (d *Device) Transport(conn *AdbConn) error {
+	return conn.TransportSerial(d.Serial)
 }
 
 func stringInSlice(a string, list []string) bool {

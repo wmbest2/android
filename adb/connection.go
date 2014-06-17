@@ -11,7 +11,7 @@ import (
 
 type Transporter interface {
 	Dial() (*AdbConn, error)
-	Transport(conn *AdbConn)
+	Transport(conn *AdbConn) error
 }
 
 type Dialer struct {
@@ -35,19 +35,19 @@ func (a *Dialer) Dial() (*AdbConn, error) {
 
 func (a *AdbConn) TransportAny() error {
 	cmd := fmt.Sprintf("host:transport-any")
-	_, err := a.Write([]byte(cmd))
+	_, err := a.WriteCmd(cmd)
 	return err
 }
 
 func (a *AdbConn) TransportSerial(ser string) error {
 	cmd := fmt.Sprintf("host:transport:%s", ser)
-	_, err := a.Write([]byte(cmd))
+	_, err := a.WriteCmd(cmd)
 	return err
 }
 
 func (a *AdbConn) Shell(args ...string) error {
 	cmd := fmt.Sprintf("shell:%s", strings.Join(args, " "))
-	_, err := a.Write([]byte(cmd))
+	_, err := a.WriteCmd(cmd)
 	return err
 }
 
@@ -57,11 +57,11 @@ func (a *AdbConn) readSize(bcount int) (uint64, error) {
 	return strconv.ParseUint(string(size), 16, 0)
 }
 
-func (a *AdbConn) Write(cmd []byte) (int, error) {
+func (a *AdbConn) WriteCmd(cmd string) (int, error) {
 	prefix := fmt.Sprintf("%04x", len(cmd))
-	w := bufio.NewWriter(a.conn)
+	w := bufio.NewWriter(a)
 	w.WriteString(prefix)
-	i, err := w.Write(cmd)
+	i, err := w.WriteString(cmd)
 
 	if err != nil {
 		return 0, errors.New(`Could not write to ADB server`)
@@ -76,6 +76,10 @@ func (a *AdbConn) Write(cmd []byte) (int, error) {
 	}
 
 	return i, nil
+}
+
+func (a *AdbConn) Write(b []byte) (int, error) {
+	return a.conn.Write(b)
 }
 
 func (a *AdbConn) Read(p []byte) (int, error) {
