@@ -30,7 +30,7 @@ const (
 	JELLY_BEAN_MR1
 	JELLY_BEAN_MR2
 	KITKAT
-	LATEST SdkVersion = iota - 1
+	LATEST = KITKAT
 )
 
 var sdkMap = map[SdkVersion]string{
@@ -67,6 +67,10 @@ type DeviceFilter struct {
 	MaxSdk  SdkVersion
 }
 
+var (
+	AllDevices = &DeviceFilter{MaxSdk: LATEST}
+)
+
 func (s SdkVersion) String() string {
 	return sdkMap[s]
 }
@@ -95,7 +99,10 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 		return true
 	}
 
-	if d.Sdk < filter.MinSdk || (filter.MaxSdk != 0 && d.Sdk > filter.MaxSdk) {
+	if d.Sdk < filter.MinSdk {
+		return false
+	} else if filter.MaxSdk != 0 && d.Sdk > filter.MaxSdk {
+		fmt.Println(d.Sdk)
 		return false
 	} else if !stringInSlice(d.Serial, filter.Serials) {
 		return false

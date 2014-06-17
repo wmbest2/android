@@ -1,6 +1,7 @@
 package adb
 
 import (
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -31,11 +32,13 @@ func Shell(t Transporter, args ...string) chan []byte {
 	go func() {
 		defer close(out)
 		conn, err := t.Dial()
-		defer conn.Close()
 
 		if err != nil {
+			fmt.Println(err)
 			return
 		}
+
+		defer conn.Close()
 
 		t.Transport(conn)
 		conn.Shell(args...)
@@ -103,24 +106,28 @@ func (adb *Adb) TrackDevices() chan []byte {
 	return out
 }
 
-func FindDevice(serial string) Device {
+func (adb *Adb) FindDevice(serial string) Device {
 	var dev Device
-	devices := FindDevices(serial)
+	devices := adb.FindDevices(serial)
 	if len(devices) > 0 {
 		dev = *devices[0]
 	}
 	return dev
 }
 
-func FindDevices(serial ...string) []*Device {
+func (adb *Adb) FindDevices(serial ...string) []*Device {
 	filter := &DeviceFilter{}
 	filter.Serials = serial
 	filter.MaxSdk = LATEST
-	return ListDevices(filter)
+	return adb.ListDevices(filter)
 }
 
 func ListDevices(filter *DeviceFilter) []*Device {
-	output := Devices()
+	return Default.ListDevices(filter)
+}
+
+func (adb *Adb) ListDevices(filter *DeviceFilter) []*Device {
+	output := adb.Devices()
 	lines := strings.Split(string(output), "\n")
 
 	devices := make([]*Device, 0, len(lines))
@@ -131,7 +138,7 @@ func ListDevices(filter *DeviceFilter) []*Device {
 		if strings.TrimSpace(line) != "" {
 			device := strings.Split(line, "\t")[0]
 
-			d := &Device{Dialer: Default.Dialer, Serial: device}
+			d := &Device{Dialer: adb.Dialer, Serial: device}
 			devices = append(devices, d)
 
 			wg.Add(1)
