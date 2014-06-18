@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type DeviceType int
@@ -81,8 +82,43 @@ func (s SdkVersion) String() string {
 
 /*}*/
 
+type DeviceWatcher []chan []*Device
+
 func (d *Device) Transport(conn *AdbConn) error {
 	return conn.TransportSerial(d.Serial)
+}
+
+func (adb *Adb) ParseDevices(filter *DeviceFilter, input []byte) []*Device {
+	lines := strings.Split(string(input), "\n")
+
+	devices := make([]*Device, 0, len(lines))
+
+	var wg sync.WaitGroup
+
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			device := strings.Split(line, "\t")[0]
+
+			d := &Device{Dialer: adb.Dialer, Serial: device}
+			devices = append(devices, d)
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				d.Update()
+			}()
+		}
+	}
+
+	wg.Wait()
+
+	result := make([]*Device, 0, len(lines))
+	for _, device := range devices {
+		if device.MatchFilter(filter) {
+			result = append(result, device)
+		}
+	}
+	return result
 }
 
 func stringInSlice(a string, list []string) bool {

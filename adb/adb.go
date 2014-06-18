@@ -3,8 +3,6 @@ package adb
 import (
 	"fmt"
 	"os"
-	"strings"
-	"sync"
 )
 
 const (
@@ -133,35 +131,5 @@ func ListDevices(filter *DeviceFilter) []*Device {
 
 func (adb *Adb) ListDevices(filter *DeviceFilter) []*Device {
 	output := adb.Devices()
-	lines := strings.Split(string(output), "\n")
-
-	devices := make([]*Device, 0, len(lines))
-
-	var wg sync.WaitGroup
-
-	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
-			device := strings.Split(line, "\t")[0]
-
-			d := &Device{Dialer: adb.Dialer, Serial: device}
-			devices = append(devices, d)
-
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				d.Update()
-			}()
-		}
-	}
-
-	wg.Wait()
-
-	result := make([]*Device, 0, len(lines))
-	for _, device := range devices {
-		if device.MatchFilter(filter) {
-			result = append(result, device)
-		}
-	}
-
-	return result
+	return adb.ParseDevices(filter, output)
 }
