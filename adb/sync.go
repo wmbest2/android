@@ -59,30 +59,46 @@ func Ls(t Transporter, remote string) ([]byte, error) {
 	return b, nil
 }
 
-func Push(t Transporter, local *os.File, remote string) error {
+func PushDevices(devices []*Device, local *os.File, remote string) error {
+	d := make([]Transporter, 0, len(devices))
+	for _, t := range devices {
+		d = append(d, Transporter(t))
+	}
+
+	return PushAll(d, local, remote)
+}
+
+func PushAll(devices []Transporter, local *os.File, remote string) error {
 	info, err := local.Stat()
 	if err != nil {
 		return err
 	}
 
-	conn, err := GetPushWriter(t, remote, uint32(info.Mode()))
-
-	if err != nil {
-		return err
+	d := make([]io.Writer, 0, len(devices))
+	for _, t := range devices {
+		conn, err := GetPushWriter(Transporter(t), remote, uint32(info.Mode()))
+		if err != nil {
+			return err
+		}
+		d = append(d, io.Writer(conn))
 	}
 
 	reader := bufio.NewReader(local)
-	sections := NewSectionedMultiWriter(conn)
+	sections := NewSectionedMultiWriter(d...)
 	writer := bufio.NewWriter(sections)
 	writer.ReadFrom(reader)
 	writer.Flush()
 	sections.Close()
 
-	wr := bufio.NewWriter(conn)
+	wr := bufio.NewWriter(io.MultiWriter(d...))
 	wr.WriteString("DONE")
 	binary.Write(wr, binary.LittleEndian, uint32(info.ModTime().Unix()))
 	wr.Flush()
 	return nil
+}
+
+func Push(t Transporter, local *os.File, remote string) error {
+	return PushAll([]Transporter{t}, local, remote)
 }
 
 func GetPushWriter(t Transporter, remote string, filePerm uint32) (*AdbConn, error) {
