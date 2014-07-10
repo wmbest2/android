@@ -3,6 +3,7 @@ package adb
 import (
 	"bufio"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -81,6 +82,7 @@ func PushAll(devices []Transporter, local *os.File, remote string) error {
 			return err
 		}
 		d = append(d, io.Writer(conn))
+		defer conn.VerifyOk()
 	}
 
 	reader := bufio.NewReader(local)
@@ -94,6 +96,7 @@ func PushAll(devices []Transporter, local *os.File, remote string) error {
 	wr.WriteString("DONE")
 	binary.Write(wr, binary.LittleEndian, uint32(info.ModTime().Unix()))
 	wr.Flush()
+
 	return nil
 }
 
@@ -122,6 +125,43 @@ func GetPushWriter(t Transporter, remote string, filePerm uint32) (*AdbConn, err
 	w.Flush()
 
 	return conn, nil
+}
+
+func Pull(t Transporter, local *os.File, remote string) error {
+	conn, err := t.Dial()
+	if err != nil {
+		return err
+	}
+
+	t.Transport(conn)
+	_, err = conn.WriteCmd("sync:")
+	if err != nil {
+		return err
+	}
+
+	w := bufio.NewWriter(conn)
+	w.WriteString("RECV")
+	binary.Write(w, binary.LittleEndian, uint32(len(remote)))
+	w.WriteString(remote)
+	w.Flush()
+
+	writer := bufio.NewWriter(local)
+	code, err := conn.ReadCode()
+
+	if code == `FAIL` {
+		return errors.New(fmt.Sprintf("Unable to locate file %s", remote))
+	}
+
+	var n uint32
+	for err == nil && code != `DONE` {
+		binary.Read(conn, binary.LittleEndian, &n)
+		writer.ReadFrom(&io.LimitedReader{conn, int64(n)})
+		writer.Flush()
+
+		code, err = conn.ReadCode()
+	}
+
+	return nil
 }
 
 type SectionedMultiWriter struct {

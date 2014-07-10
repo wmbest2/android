@@ -1,6 +1,7 @@
 package adb
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 )
@@ -11,24 +12,53 @@ const (
 
 type Adb struct {
 	Dialer
+	Method Transport
 }
 
 var (
-	Default = &Adb{Dialer{"localhost", 5037}}
+	Default = &Adb{Dialer{"localhost", 5037}, Any}
 )
 
 func Devices() []byte {
 	return Default.Devices()
 }
 
-func (a *Adb) Transport(conn *AdbConn) error {
-	return conn.TransportAny()
+func Log(t Transporter, args ...string) chan []byte {
+	out := make(chan []byte)
+
+	go func(out chan []byte) {
+		defer close(out)
+		conn, err := t.Dial()
+
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		defer conn.Close()
+
+		err = t.Transport(conn)
+		if err != nil {
+			fmt.Println("more than one device or emulator")
+			os.Exit(2)
+		}
+		conn.Log(args...)
+
+		for {
+			line, _, err := conn.r.ReadLine()
+			if err != nil {
+				break
+			}
+			out <- line
+		}
+	}(out)
+	return out
 }
 
 func Shell(t Transporter, args ...string) chan []byte {
 	out := make(chan []byte)
 
-	go func() {
+	go func(out chan []byte) {
 		defer close(out)
 		conn, err := t.Dial()
 
@@ -48,22 +78,35 @@ func Shell(t Transporter, args ...string) chan []byte {
 
 		for {
 			line, _, err := conn.r.ReadLine()
+			line = bytes.Replace(line, []byte{'\r'}, []byte{}, 0)
 			if err != nil {
 				break
 			}
 			out <- line
 		}
-	}()
+	}(out)
 	return out
 }
 
 func ShellSync(t Transporter, args ...string) []byte {
-	output := make([]byte, 0)
 	out := Shell(t, args...)
+	output := make([]byte, 0)
 	for line := range out {
 		output = append(output, line...)
+		output = append(output, '\n')
 	}
 	return output
+}
+
+func (a *Adb) Transport(conn *AdbConn) error {
+	switch a.Method {
+	case Usb:
+		return conn.TransportUsb()
+	case Emulator:
+		return conn.TransportEmulator()
+	default:
+		return conn.TransportAny()
+	}
 }
 
 func (adb *Adb) Devices() []byte {

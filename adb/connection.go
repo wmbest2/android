@@ -9,6 +9,14 @@ import (
 	"strings"
 )
 
+type Transport int
+
+const (
+	Any Transport = iota
+	Emulator
+	Usb
+)
+
 type Transporter interface {
 	Dial() (*AdbConn, error)
 	Transport(conn *AdbConn) error
@@ -39,6 +47,18 @@ func (a *AdbConn) TransportAny() error {
 	return err
 }
 
+func (a *AdbConn) TransportEmulator() error {
+	cmd := fmt.Sprintf("host:transport-local")
+	_, err := a.WriteCmd(cmd)
+	return err
+}
+
+func (a *AdbConn) TransportUsb() error {
+	cmd := fmt.Sprintf("host:transport-usb")
+	_, err := a.WriteCmd(cmd)
+	return err
+}
+
 func (a *AdbConn) TransportSerial(ser string) error {
 	cmd := fmt.Sprintf("host:transport:%s", ser)
 	_, err := a.WriteCmd(cmd)
@@ -47,6 +67,12 @@ func (a *AdbConn) TransportSerial(ser string) error {
 
 func (a *AdbConn) Shell(args ...string) error {
 	cmd := fmt.Sprintf("shell:%s", strings.Join(args, " "))
+	_, err := a.WriteCmd(cmd)
+	return err
+}
+
+func (a *AdbConn) Log(args ...string) error {
+	cmd := fmt.Sprintf("log:%s", strings.Join(args, " "))
 	_, err := a.WriteCmd(cmd)
 	return err
 }
@@ -69,13 +95,24 @@ func (a *AdbConn) WriteCmd(cmd string) (int, error) {
 
 	w.Flush()
 
-	status := make([]byte, 4)
-	_, err = a.Read(status)
-	if err != nil || string(status) != `OKAY` {
-		return 0, errors.New(`Invalid connection`)
-	}
+	return i, a.VerifyOk()
+}
 
-	return i, nil
+func (a *AdbConn) ReadCode() (string, error) {
+	status := make([]byte, 4)
+	_, err := a.Read(status)
+	if err != nil {
+		return "FAIL", err
+	}
+	return string(status), nil
+}
+
+func (a *AdbConn) VerifyOk() error {
+	code, err := a.ReadCode()
+	if err != nil || code != `OKAY` {
+		return errors.New(`Invalid connection`)
+	}
+	return nil
 }
 
 func (a *AdbConn) Write(b []byte) (int, error) {
