@@ -1,7 +1,6 @@
 package pidcat
 
 import (
-	"bytes"
 	"fmt"
 	"github.com/fatih/color"
 	"github.com/wmbest2/android/adb"
@@ -12,14 +11,7 @@ import (
 type colorFunc func(format string, a ...interface{}) string
 
 var (
-	PID_PARSER     = regexp.MustCompile(`\S+\s+(\S+)(?:\s+\S+){5}\s+(?:\S\s)?(\S*)`)
-	PID_START      = regexp.MustCompile(`^Start proc ([a-zA-Z0-9._:]+) for ([a-z]+ [^:]+): pid=(\d+) uid=(\d+) gids=(.*)$`)
-	PID_KILL       = regexp.MustCompile(`^Killing (\d+):([a-zA-Z0-9._:]+)/[^:]+: (.*)$`)
-	PID_LEAVE      = regexp.MustCompile(`^No longer want ([a-zA-Z0-9._:]+) \(pid (\d+)\): .*$`)
-	PID_DEATH      = regexp.MustCompile(`^Process ([a-zA-Z0-9._:]+) \(pid (\d+)\) has died.?$`)
-	LOG_LINE       = regexp.MustCompile(`^([A-Z])/(.+?)\( *(\d+)\): (.*?)$`)
-	BUG_LINE       = regexp.MustCompile(`.*nativeGetEnabledTags.*`)
-	BACKTRACE_LINE = regexp.MustCompile(`^#(.*?)pc\s(.*?)$`)
+	PID_PARSER = regexp.MustCompile(`\S+\s+(\S+)(?:\s+\S+){5}\s+(?:\S\s)?(\S*)`)
 
 	TagTypes     map[string]string
 	KnownTags    map[string]colorFunc
@@ -94,49 +86,20 @@ func (p *PidCat) UpdateAppFilters(t adb.Transporter) error {
 	return nil
 }
 
-func (p *PidCat) matches(pid string) bool {
+func (p *PidCat) matches(pid []byte) bool {
 	if len(p.AppFilters) == 0 {
 		return true
 	}
-	_, present := p.pidFilters[pid]
+	_, present := p.pidFilters[string(pid)]
 	return present
 }
 
-func (p *PidCat) matchesPackage(pack string) bool {
+func (p *PidCat) matchesPackage(pack []byte) bool {
 	if len(p.AppFilters) == 0 {
 		return true
 	}
-	_, present := p.AppFilters[pack]
+	_, present := p.AppFilters[string(pack)]
 	return present
-}
-
-func (p *PidCat) parseDeath(tag string, msg string) (string, string) {
-	if tag == "ActivityManager" {
-		var matcher *regexp.Regexp
-		swap := false
-		if PID_KILL.MatchString(msg) {
-			matcher = PID_KILL
-			swap = true
-		} else if PID_LEAVE.MatchString(msg) {
-			matcher = PID_LEAVE
-		} else if PID_DEATH.MatchString(msg) {
-			matcher = PID_DEATH
-		}
-		if matcher != nil {
-			match := matcher.FindStringSubmatch(msg)
-			pid := match[2]
-			pack := match[1]
-			if swap {
-				pid = pack
-				pack = match[2]
-			}
-			if p.matchesPackage(pack) && p.matches(pid) {
-				return pid, pack
-			}
-		}
-	}
-
-	return "", ""
 }
 
 func getColor(tag string) colorFunc {
@@ -149,40 +112,30 @@ func getColor(tag string) colorFunc {
 	return color
 }
 
-func (p *PidCat) Sprint(line string) string {
-	if BUG_LINE.MatchString(line) || !LOG_LINE.MatchString(line) {
-		return ""
-	}
-	var buffer bytes.Buffer
+func (p *PidCat) Sprint(in []byte) []byte {
+	line := ParseLine(in)
 
-	logline := LOG_LINE.FindStringSubmatch(line)
-	if PID_START.MatchString(logline[4]) {
-		start := PID_START.FindStringSubmatch(logline[4])
-		if p.matchesPackage(start[1]) {
-			p.pidFilters[start[3]] = true
-			if p.PrettyPrint {
-				buffer.WriteString("\n")
-				fmt.Sprintf("\nProcess: %s (PID: %s) started\n", start[3], start[1])
-			}
+	if line == nil {
+		return nil
+	} else if line.Type == ProcessStart {
+		if p.matchesPackage(line.Package) {
+			p.pidFilters[string(line.PID)] = true
+			return line.Message
 		}
+		return nil
+	} else if line.Type == ProcessStop && p.matches(line.PID) {
+		delete(p.pidFilters, string(line.PID))
+		return line.Message
 	}
 
-	pid, pack := p.parseDeath(logline[2], logline[4])
-	if pid != "" {
-		delete(p.pidFilters, pid)
-		if p.PrettyPrint {
-			return fmt.Sprintf("\nProcess: %s (PID: %s) ended\n", pid, pack)
-		}
-	}
-
-	inPid := p.matches(logline[3])
+	inPid := p.matches(line.PID)
 	if inPid && !p.PrettyPrint {
-		return fmt.Sprintln(line)
+		return []byte(fmt.Sprintf("%s	(%s): %s", line.Tag, line.PID, line.Message))
 	} else if !inPid {
-		return ""
+		return nil
 	}
 
-	tag := strings.TrimSpace(logline[2])
+	tag := string(line.Tag)
 	if tag != p.lastTag {
 		p.lastTag = tag
 		colorize := getColor(tag)
@@ -192,11 +145,11 @@ func (p *PidCat) Sprint(line string) string {
 			count = 0
 		}
 		tag = fmt.Sprintf("%s%s", strings.Repeat(` `, count), tag)
-		return fmt.Sprintln(colorize(tag), " ", TagTypes[logline[1]], " ", logline[4])
+		return []byte(fmt.Sprintln(colorize(tag), " ", TagTypes[string(line.Level)], " ", string(line.Message)))
 	} else {
 		tag = strings.Repeat(` `, p.TagWidth)
-		return fmt.Sprintln(tag, " ", TagTypes[logline[1]], " ", logline[4])
+		return []byte(fmt.Sprintln(tag, " ", TagTypes[string(line.Level)], " ", string(line.Message)))
 	}
 
-	return ""
+	return nil
 }

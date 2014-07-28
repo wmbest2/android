@@ -158,9 +158,13 @@ func (d *Device) GetProp(prop string) chan string {
 	return out
 }
 
+func (d *Device) HasPackage(pack string) bool {
+	return d.findValue(pack, "pm", "list", "packages", "-3")
+}
+
 func (d *Device) SetScreenOn(on bool) {
 	current := d.findValue("mScreenOn=false", "dumpsys", "input_method")
-	if !current && on || current && !on {
+	if current && on || !current && !on {
 		d.SendKey(26)
 	}
 }
@@ -171,6 +175,9 @@ func (d *Device) findValue(val string, args ...string) bool {
 	for line := range out {
 		if line != nil {
 			current = bytes.Contains(line, []byte(val))
+			if current {
+				break
+			}
 		}
 	}
 	return current
@@ -188,6 +195,8 @@ func (d *Device) Unlock() {
 }
 
 func (d *Device) Update() {
+
+	WaitFor(d)
 
 	out := []chan string{
 		d.GetProp("ro.product.manufacturer"),

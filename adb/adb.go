@@ -19,8 +19,25 @@ var (
 	Default = &Adb{Dialer{"localhost", 5037}, Any}
 )
 
+func Connect(host string, port int) *Adb {
+	return &Adb{Dialer{host, port}, Any}
+}
+
 func Devices() []byte {
 	return Default.Devices()
+}
+
+func WaitFor(t Transporter) {
+	for {
+		conn, _ := t.Dial()
+		err := t.Transport(conn)
+
+		if err == nil {
+			return
+		}
+
+		defer conn.Close()
+	}
 }
 
 func Log(t Transporter, args ...string) chan []byte {
@@ -71,6 +88,7 @@ func Shell(t Transporter, args ...string) chan []byte {
 
 		err = t.Transport(conn)
 		if err != nil {
+			fmt.Println(err)
 			fmt.Println("more than one device or emulator")
 			os.Exit(2)
 		}

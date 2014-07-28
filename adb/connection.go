@@ -116,6 +116,9 @@ func (a *AdbConn) VerifyOk() error {
 }
 
 func (a *AdbConn) Write(b []byte) (int, error) {
+	if a.conn == nil {
+		return 0, errors.New(`Could not write to ADB server`)
+	}
 	return a.conn.Write(b)
 }
 
