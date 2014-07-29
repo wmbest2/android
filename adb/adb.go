@@ -148,7 +148,12 @@ func (adb *Adb) TrackDevices() chan []byte {
 	go func() {
 		defer close(out)
 
-		conn, _ := adb.Dial()
+		conn, err := adb.Dial()
+
+		if err != nil {
+			return
+		}
+
 		defer conn.Close()
 
 		conn.WriteCmd("host:track-devices")
