@@ -36,6 +36,10 @@ func (a *Dialer) Dial() (*AdbConn, error) {
 	h := fmt.Sprintf("%s:%d", a.Host, a.Port)
 	c, err := net.Dial("tcp", h)
 	if err != nil {
+		if c != nil {
+			fmt.Printf("Closing connection to %s\n", c)
+			c.Close()
+		}
 		return nil, err
 	}
 	return &AdbConn{c, bufio.NewReader(c)}, nil
@@ -116,14 +120,16 @@ func (a *AdbConn) VerifyOk() error {
 }
 
 func (a *AdbConn) Write(b []byte) (int, error) {
-	if a.conn == nil {
+	if a == nil || a.conn == nil {
 		return 0, errors.New(`Could not write to ADB server`)
 	}
 	return a.conn.Write(b)
 }
 
 func (a *AdbConn) Read(p []byte) (int, error) {
-	if a.r == nil {
+	if a == nil {
+		return 0, errors.New(`Could not read from ADB server`)
+	} else if a.r == nil {
 		a.r = bufio.NewReader(a.conn)
 	}
 

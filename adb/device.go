@@ -96,7 +96,7 @@ func (adb *Adb) ParseDevices(filter *DeviceFilter, input []byte) []*Device {
 	var wg sync.WaitGroup
 
 	for _, line := range lines {
-		if strings.TrimSpace(line) != "" {
+		if strings.Contains(line, "device") && strings.TrimSpace(line) != "" {
 			device := strings.Split(line, "\t")[0]
 
 			d := &Device{Dialer: adb.Dialer, Serial: device}
