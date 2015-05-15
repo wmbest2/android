@@ -1,9 +1,11 @@
 package adb
 
 import (
+	"bytes"
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type DeviceType int
@@ -29,7 +31,7 @@ const (
 	JELLY_BEAN_MR1
 	JELLY_BEAN_MR2
 	KITKAT
-	LATEST SdkVersion = iota - 1
+	LATEST = KITKAT
 )
 
 var sdkMap = map[SdkVersion]string{
@@ -48,27 +50,27 @@ var sdkMap = map[SdkVersion]string{
 	KITKAT:                 `KITKAT`,
 }
 
-type AdbRunner interface {
-	Exec(args ...string) chan interface{}
-	ExecSync(args ...string) ([]byte, error)
-}
-
 type Device struct {
+	Dialer       `json:"-"`
 	Serial       string     `json:"serial"`
 	Manufacturer string     `json:"manufacturer"`
 	Model        string     `json:"model"`
 	Sdk          SdkVersion `json:"sdk"`
 	Version      string     `json:"version"`
-    Density      int64      `json:"density"`
+	Density      int64      `json:"density"`
 }
 
 type DeviceFilter struct {
 	Type    DeviceType
 	Serials []string
-    Density int64
+	Density int64
 	MinSdk  SdkVersion
 	MaxSdk  SdkVersion
 }
+
+var (
+	AllDevices = &DeviceFilter{MaxSdk: LATEST}
+)
 
 func (s SdkVersion) String() string {
 	return sdkMap[s]
@@ -79,14 +81,44 @@ func (s SdkVersion) String() string {
 /*func GetFilter(arg string) {*/
 
 /*}*/
-func (d *Device) Exec(args ...string) chan interface{} {
-	args = append([]string{"-s", d.Serial}, args...)
-	return Exec(args...)
+
+type DeviceWatcher []chan []*Device
+
+func (d *Device) Transport(conn *AdbConn) error {
+	return conn.TransportSerial(d.Serial)
 }
 
-func (d *Device) ExecSync(args ...string) ([]byte, error) {
-	args = append([]string{"-s", d.Serial}, args...)
-	return ExecSync(args...)
+func (adb *Adb) ParseDevices(filter *DeviceFilter, input []byte) []*Device {
+	lines := strings.Split(string(input), "\n")
+
+	devices := make([]*Device, 0, len(lines))
+
+	var wg sync.WaitGroup
+
+	for _, line := range lines {
+		if strings.Contains(line, "device") && strings.TrimSpace(line) != "" {
+			device := strings.Split(line, "\t")[0]
+
+			d := &Device{Dialer: adb.Dialer, Serial: device}
+			devices = append(devices, d)
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				d.Update()
+			}()
+		}
+	}
+
+	wg.Wait()
+
+	result := make([]*Device, 0, len(lines))
+	for _, device := range devices {
+		if device.MatchFilter(filter) {
+			result = append(result, device)
+		}
+	}
+	return result
 }
 
 func stringInSlice(a string, list []string) bool {
@@ -103,12 +135,15 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 		return true
 	}
 
-	if d.Sdk < filter.MinSdk || (filter.MaxSdk != 0 && d.Sdk > filter.MaxSdk) {
+	if d.Sdk < filter.MinSdk {
+		return false
+	} else if filter.MaxSdk != 0 && d.Sdk > filter.MaxSdk {
+		fmt.Println(d.Sdk)
 		return false
 	} else if !stringInSlice(d.Serial, filter.Serials) {
 		return false
-    } else if filter.Density != 0 && filter.Density != d.Density{
-        return false
+	} else if filter.Density != 0 && filter.Density != d.Density {
+		return false
 	}
 	return true
 }
@@ -116,49 +151,66 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 func (d *Device) GetProp(prop string) chan string {
 	out := make(chan string)
 	go func() {
-		p, err := d.ExecSync("shell", "getprop", prop)
-		if err == nil {
-			out <- strings.TrimSpace(string(p))
-		} else {
-			out <- ""
-		}
+		p := ShellSync(d, "getprop", prop)
+		out <- strings.TrimSpace(string(p))
 	}()
 
 	return out
 }
 
-func (d *Device) SetScreenOn(on bool) {
-	screen, err := d.ExecSync("shell", "dumpsys", "input_method", "|", "grep", "mScreenOn=false")
-	if err != nil {
-		return
-	}
+func (d *Device) HasPackage(pack string) bool {
+	return d.findValue(pack, "pm", "list", "packages", "-3")
+}
 
-    if screen != nil && on || screen == nil && !on{
-        d.SendKey(26)
-    }
+func (d *Device) SetScreenOn(on bool) {
+	current := d.findValue("mScreenOn=false", "dumpsys", "input_method")
+	if current && on || !current && !on {
+		d.SendKey(26)
+	}
+}
+
+func (d *Device) findValue(val string, args ...string) bool {
+	out := Shell(d, args...)
+	current := false
+	for line := range out {
+		if line != nil {
+			current = bytes.Contains(line, []byte(val))
+			if current {
+				break
+			}
+		}
+	}
+	return current
 }
 
 func (d *Device) SendKey(aKey int) {
-    d.ExecSync("shell", "input", "keyevent", fmt.Sprintf("%d", aKey))
+	ShellSync(d, "input", "keyevent", fmt.Sprintf("%d", aKey))
 }
 
 func (d *Device) Unlock() {
-	screen, err := d.ExecSync("shell", "dumpsys", "activity", "|", "grep", "mLockScreenShown.true")
-	if err != nil {
-		return
+	current := d.findValue("mLockScreenShown true", "dumpsys", "activity")
+	if current {
+		d.SendKey(82)
 	}
-    if screen != nil {
-        d.SendKey(82)
-    }
 }
 
 func (d *Device) Update() {
 
-	d.Manufacturer = <-d.GetProp("ro.product.manufacturer")
-	d.Model = <-d.GetProp("ro.product.model")
-	d.Version = <-d.GetProp("ro.build.version.release")
-	sdk := <-d.GetProp("ro.build.version.sdk")
-	den := <-d.GetProp("ro.sf.lcd_density")
+	WaitFor(d)
+
+	out := []chan string{
+		d.GetProp("ro.product.manufacturer"),
+		d.GetProp("ro.product.model"),
+		d.GetProp("ro.build.version.release"),
+		d.GetProp("ro.build.version.sdk"),
+		d.GetProp("ro.sf.lcd_density"),
+	}
+
+	d.Manufacturer = <-out[0]
+	d.Model = <-out[1]
+	d.Version = <-out[2]
+	sdk := <-out[3]
+	den := <-out[4]
 
 	sdk_int, _ := strconv.ParseInt(sdk, 10, 0)
 	d.Sdk = SdkVersion(sdk_int)
