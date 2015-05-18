@@ -4,6 +4,7 @@ package main
 
 import (
 	"archive/zip"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -17,21 +18,20 @@ func parseManifest(data []byte) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var mainAct *apk.AppActivity
+	var launchActivity apk.AppActivity
 	for _, act := range manifest.App.Activity {
-		if mainAct != nil {
-			break
-		}
 		for _, intent := range act.IntentFilter {
-			if intent.Action.Name == "android.intent.action.MAIN" {
-				mainAct = &act
-				break
+			if intent.Action.Name == "android.intent.action.MAIN" &&
+				intent.Category.Name == "android.intent.category.LAUNCHER" {
+				launchActivity = act
+				goto FOUND
 			}
 		}
 	}
-	log.Println(manifest.Package)
-	log.Println(mainAct.Name)
-	fmt.Printf("adb shell am start -n %s/%s\n", manifest.Package, mainAct.Name)
+FOUND:
+	fmt.Println(manifest.Package)
+	fmt.Println(launchActivity.Name)
+	fmt.Printf("adb shell am start -n %s/%s\n", manifest.Package, launchActivity.Name)
 	//out, _ := xml.MarshalIndent(manifest, "", "\t")
 	//fmt.Printf("%s\n", string(out))
 }
@@ -58,7 +58,8 @@ func ReadManifestFromApk(filename string) (data []byte, err error) {
 }
 
 func main() {
-	data, err := ReadManifestFromApk("ScreenTest.apk")
+	flag.Parse()
+	data, err := ReadManifestFromApk(flag.Arg(0))
 	if err != nil {
 		log.Fatal(err)
 	}
