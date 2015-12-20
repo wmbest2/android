@@ -2,6 +2,7 @@ package adb
 
 import (
 	"bufio"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"net"
@@ -102,11 +103,17 @@ func (a *AdbConn) WriteCmd(cmd string) (int, error) {
 	return i, a.VerifyOk()
 }
 
+func (a *AdbConn) readUint32() uint32 {
+	size := make([]byte, 4)
+	a.r.Read(size)
+	return binary.LittleEndian.Uint32(size)
+}
+
 func (a *AdbConn) ReadCode() (string, error) {
 	status := make([]byte, 4)
 	_, err := a.Read(status)
 	if err != nil {
-		return "FAIL", err
+		return "UNKN", err
 	}
 	return string(status), nil
 }
@@ -114,7 +121,7 @@ func (a *AdbConn) ReadCode() (string, error) {
 func (a *AdbConn) VerifyOk() error {
 	code, err := a.ReadCode()
 	if err != nil || code != `OKAY` {
-		return errors.New(`Invalid connection`)
+		return errors.New(`Invalid connection CODE: ` + code)
 	}
 	return nil
 }

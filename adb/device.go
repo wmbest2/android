@@ -3,11 +3,14 @@ package adb
 import (
 	"bytes"
 	"fmt"
+	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 )
 
+type DensityBucket int
 type DeviceType int
 type SdkVersion int
 
@@ -15,6 +18,15 @@ const (
 	PHONE DeviceType = iota
 	TABLET_7
 	TABLET_10
+)
+
+const (
+	LDPI    DensityBucket = 120
+	MDPI                  = 160
+	HDPI                  = 240
+	XHDPI                 = 320
+	XXHDPI                = 480
+	XXXHDPI               = 640
 )
 
 const (
@@ -31,8 +43,16 @@ const (
 	JELLY_BEAN_MR1
 	JELLY_BEAN_MR2
 	KITKAT
-	LATEST = KITKAT
+	WEAR
+	LOLLIPOP
+	LATEST = LOLLIPOP
 )
+
+var typeMap = map[DeviceType]string{
+	PHONE:     `Phone`,
+	TABLET_7:  `7in Tablet`,
+	TABLET_10: `10in Tablet`,
+}
 
 var sdkMap = map[SdkVersion]string{
 	ECLAIR:                 `ECLAIR`,
@@ -48,22 +68,27 @@ var sdkMap = map[SdkVersion]string{
 	JELLY_BEAN_MR1:         `JELLY_BEAN_MR1`,
 	JELLY_BEAN_MR2:         `JELLY_BEAN_MR2`,
 	KITKAT:                 `KITKAT`,
+	WEAR:                   `WEAR v1`,
+	LOLLIPOP:               `LOLLIPOP`,
 }
 
 type Device struct {
 	Dialer       `json:"-"`
-	Serial       string     `json:"serial"`
-	Manufacturer string     `json:"manufacturer"`
-	Model        string     `json:"model"`
-	Sdk          SdkVersion `json:"sdk"`
-	Version      string     `json:"version"`
-	Density      int64      `json:"density"`
+	Serial       string            `json:"serial"`
+	Manufacturer string            `json:"manufacturer"`
+	Model        string            `json:"model"`
+	Sdk          SdkVersion        `json:"sdk"`
+	Version      string            `json:"version"`
+	Density      DensityBucket     `json:"density"`
+	Height       int64             `json:"height"`
+	Width        int64             `json:"width"`
+	Properties   map[string]string `json:_`
 }
 
 type DeviceFilter struct {
 	Type    DeviceType
 	Serials []string
-	Density int64
+	Density DensityBucket
 	MinSdk  SdkVersion
 	MaxSdk  SdkVersion
 }
@@ -83,6 +108,17 @@ func (s SdkVersion) String() string {
 /*}*/
 
 type DeviceWatcher []chan []*Device
+
+func (d *Device) Type() DeviceType {
+	sw := math.Min(float64(d.Height), float64(d.Width))
+	dip := float64(LDPI) / float64(d.Density) * sw
+	if dip >= 720 {
+		return TABLET_10
+	} else if dip >= 600 {
+		return TABLET_7
+	}
+	return PHONE
+}
 
 func (d *Device) Transport(conn *AdbConn) error {
 	return conn.TransportSerial(d.Serial)
@@ -138,7 +174,6 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 	if d.Sdk < filter.MinSdk {
 		return false
 	} else if filter.MaxSdk != 0 && d.Sdk > filter.MaxSdk {
-		fmt.Println(d.Sdk)
 		return false
 	} else if !stringInSlice(d.Serial, filter.Serials) {
 		return false
@@ -148,14 +183,28 @@ func (d *Device) MatchFilter(filter *DeviceFilter) bool {
 	return true
 }
 
-func (d *Device) GetProp(prop string) chan string {
-	out := make(chan string)
-	go func() {
-		p := ShellSync(d, "getprop", prop)
-		out <- strings.TrimSpace(string(p))
-	}()
+func (d *Device) RefreshProps() {
+	d.Properties = make(map[string]string)
 
-	return out
+	proprx, err := regexp.Compile("\\[(.*)\\]: \\[(.*)\\]")
+
+	if err != nil {
+		panic(err)
+	}
+
+	out := Shell(d, "getprop")
+	for line := range out {
+		if line != nil {
+			matches := proprx.FindSubmatch(line)
+			if len(matches) > 2 {
+				d.Properties[string(matches[1])] = string(matches[2])
+			}
+		}
+	}
+}
+
+func (d *Device) GetProp(prop string) string {
+	return d.Properties[prop]
 }
 
 func (d *Device) HasPackage(pack string) bool {
@@ -197,8 +246,9 @@ func (d *Device) Unlock() {
 func (d *Device) Update() {
 
 	WaitFor(d)
+	d.RefreshProps()
 
-	out := []chan string{
+	out := []string{
 		d.GetProp("ro.product.manufacturer"),
 		d.GetProp("ro.product.model"),
 		d.GetProp("ro.build.version.release"),
@@ -206,18 +256,19 @@ func (d *Device) Update() {
 		d.GetProp("ro.sf.lcd_density"),
 	}
 
-	d.Manufacturer = <-out[0]
-	d.Model = <-out[1]
-	d.Version = <-out[2]
-	sdk := <-out[3]
-	den := <-out[4]
+	d.Manufacturer = out[0]
+	d.Model = out[1]
+	d.Version = out[2]
 
-	sdk_int, _ := strconv.ParseInt(sdk, 10, 0)
+	// Parse Version Code
+	sdk_int, _ := strconv.ParseInt(out[3], 10, 0)
 	d.Sdk = SdkVersion(sdk_int)
 
-	d.Density, _ = strconv.ParseInt(den, 10, 0)
+	// Parse DensityBucket
+	density, _ := strconv.ParseInt(out[4], 10, 0)
+	d.Density = DensityBucket(density)
 }
 
 func (d *Device) String() string {
-	return fmt.Sprintf("%s\t%s %s\t[%s (%s)]", d.Serial, d.Manufacturer, d.Model, d.Version, sdkMap[d.Sdk])
+	return fmt.Sprintf("%s\t%s %s\t[%s (%s) %s ]", d.Serial, d.Manufacturer, d.Model, d.Version, sdkMap[d.Sdk], typeMap[d.Type()])
 }

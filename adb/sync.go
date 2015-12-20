@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 )
 
@@ -24,7 +25,7 @@ func parseDent(a *AdbConn) {
 	b := make([]byte, length)
 	a.Read(b)
 
-	fmt.Printf("%s\n", b)
+	log.Printf("%s\n", b)
 }
 
 func Ls(t Transporter, remote string) ([]byte, error) {
@@ -140,7 +141,7 @@ func GetPushWriter(t Transporter, remote string, filePerm uint32) (*AdbConn, err
 	return conn, nil
 }
 
-func Pull(t Transporter, local *os.File, remote string) error {
+func Pull(t Transporter, local io.Writer, remote string) error {
 	conn, err := t.Dial()
 	if err != nil {
 		return err

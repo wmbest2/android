@@ -3,7 +3,9 @@ package adb
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"os"
+	"time"
 )
 
 const (
@@ -125,6 +127,75 @@ func (a *Adb) Transport(conn *AdbConn) error {
 	default:
 		return conn.TransportAny()
 	}
+}
+
+func timeTrack(start time.Time, name string) {
+	elapsed := time.Since(start)
+	log.Printf("%s took %s", name, elapsed)
+}
+
+func Frame(t Transporter) []byte {
+	conn, err := t.Dial()
+	if err != nil {
+		return []byte{}
+	}
+	defer conn.Close()
+	err = t.Transport(conn)
+	if err != nil {
+		fmt.Println(err)
+		fmt.Println("more than one device or emulator")
+		os.Exit(2)
+	}
+
+	_, err = conn.WriteCmd("framebuffer:")
+
+	if err != nil {
+		panic(err)
+	}
+
+	version := conn.readUint32()
+	fmt.Printf("Version, %d\n", version)
+	depth := conn.readUint32()
+	fmt.Printf("Depth, %d\n", depth)
+	size := conn.readUint32()
+	fmt.Println("Size, ", size)
+	height := conn.readUint32()
+	fmt.Println("height, ", height)
+	width := conn.readUint32()
+	fmt.Println("width, ", width)
+	ro := conn.readUint32()
+	fmt.Println("ro, ", ro)
+	rl := conn.readUint32()
+	fmt.Println("rl ", rl)
+	bo := conn.readUint32()
+	fmt.Println("bo, ", bo)
+	bl := conn.readUint32()
+	fmt.Println("bl ", bl)
+	gro := conn.readUint32()
+	fmt.Println("gro, ", gro)
+	gl := conn.readUint32()
+	fmt.Println("gl ", gl)
+	ao := conn.readUint32()
+	fmt.Println("ao, ", ao)
+	al := conn.readUint32()
+	fmt.Println("al ", al)
+
+	var lines []byte
+	for i := 0; i < 3; i++ {
+		lines = conn.readImageBytes(size)
+		conn.Write([]byte{1})
+	}
+	return lines
+}
+
+func (conn *AdbConn) readImageBytes(size uint32) []byte {
+	defer timeTrack(time.Now(), "readImageBytes")
+	lines := make([]byte, size)
+	w := bytes.NewBuffer(lines)
+	total, _ := w.ReadFrom(conn)
+	log.Println("PUlled ", total)
+
+	return w.Bytes()
 }
 
 func (adb *Adb) Devices() []byte {
